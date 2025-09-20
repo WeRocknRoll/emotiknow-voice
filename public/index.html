@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EmotiKnow – Live Voice Chat</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 16px}
+    .btn{padding:12px 18px;border-radius:10px;border:0;background:#6d28d9;color:#fff;font-weight:600;cursor:pointer}
+    #status{margin-left:10px;color:#4b5563}
+    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:160px;overflow:auto;border:1px solid #e5e7eb}
+    .row{display:flex;gap:10px;align-items:center;margin-top:12px}
+  </style>
+</head>
+<body>
+  <h1>EmotiKnow – Live Voice Chat</h1>
+  <p>Click <b>Start</b> once to allow mic. After that, just talk; Emma will answer without extra clicks.</p>
+
+  <div class="row">
+    <button id="start" class="btn">Start</button>
+    <button id="hangup" class="btn" style="background:#ef6c00;">Hang Up</button>
+    <span id="status">idle</span>
+  </div>
+
+  <audio id="remoteAudio" autoplay></audio>
+  <div id="log"></div>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("start");
+    const hangupBtn = document.getElementById("hangup");
+    const remoteAudio = document.getElementById("remoteAudio");
+    let pc = null, localStream = null;
+
+    function log(msg){ const p=document.createElement("div"); p.textContent=msg; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
+    function setStatus(s){ statusEl.textContent = s; }
+
+    async function start() {
+      try {
+        setStatus("requesting mic…");
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setStatus("mic granted");
+
+        // our serverless function on the same domain
+        const tokenRes = await fetch("/api/realtime-session");
+        const token = await tokenRes.json();
+        if (!token?.client_secret?.value) { log("Failed to get token"); return; }
+
+        pc = new RTCPeerConnection();
+        pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; };
+        pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
+
+        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const sdpRes = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token.client_secret.value}`,
+            "Content-Type": "application/sdp",
+            "OpenAI-Beta": "realtime=v1"
+          },
+          body: offer.sdp
+        });
+
+        const answerSDP = await sdpRes.text();
+        await pc.setRemoteDescription({ type: "answer", sdp: answerSDP });
+
+        setStatus("live (hands-free) ✨");
+        log("Session established. Speak anytime. You can interrupt Emma.");
+      } catch (err) {
+        log("Error: " + err);
+        setStatus("error");
+      }
+    }
+
+    function hangup(){
+      try{
+        if (pc) pc.close();
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+      } finally {
+        pc = null; localStream = null;
+        setStatus("ended"); log("Call ended.");
+      }
+    }
+
+    startBtn.onclick = start;
+    hangupBtn.onclick = hangup;
+  </script>
+</body>
+</html>
