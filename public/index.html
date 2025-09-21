@@ -26,6 +26,7 @@
   <div id="log"></div>
 
   <script>
+    let restarting = false;
     const logEl = document.getElementById("log");
     const statusEl = document.getElementById("status");
     const startBtn = document.getElementById("start");
@@ -50,6 +51,26 @@
         pc = new RTCPeerConnection();
         pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; };
         pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
+pc.onconnectionstatechange = () => {
+  log("pc state: " + pc.connectionState);
+  if (["disconnected", "failed"].includes(pc.connectionState)) {
+    log("Connection dropped — restarting…");
+    hangup();   // clean up
+    start();    // start a fresh session
+  }
+};
+pc.onconnectionstatechange = () => {
+  log("pc state: " + pc.connectionState);
+  if (["disconnected", "failed"].includes(pc.connectionState) && !restarting) {
+    restarting = true;
+    log("Connection dropped — restarting…");
+    setTimeout(() => {
+      hangup();   // clean up
+      start();    // fresh session
+      restarting = false;
+    }, 400);      // brief pause avoids rapid loops
+  }
+};
 
         localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
