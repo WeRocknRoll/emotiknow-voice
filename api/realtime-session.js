@@ -27,9 +27,9 @@ export default async function handler(req, res) {
         voice,
         turn_detection: {
           type: "server_vad",
-          threshold: 0.55,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 1600,
+          threshold: 0.50,
+          prefix_padding_ms: 350,
+          silence_duration_ms: 2000,
         },
         instructions: `You are Emma, EmotiKnow’s calm, supportive companion.
 Speak clearly and warmly. Keep answers concise unless asked for depth.
