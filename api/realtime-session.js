@@ -20,9 +20,9 @@ export default async function handler(req, res) {
         voice: "verse",
         turn_detection: {
           type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 150,
-          silence_duration_ms: 400
+          threshold: 0.6,
+          prefix_padding_ms: 250,
+          silence_duration_ms: 900
         },
         instructions:
 `You are Emma, EmotiKnow’s calm, supportive companion.
