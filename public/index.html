@@ -8,7 +8,7 @@
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 16px}
     .btn{padding:12px 18px;border-radius:10px;border:0;background:#6d28d9;color:#fff;font-weight:600;cursor:pointer}
     #status{margin-left:10px;color:#4b5563}
-    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:160px;overflow:auto;border:1px solid #e5e7eb}
+    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:200px;overflow:auto;border:1px solid #e5e7eb}
     .row{display:flex;gap:10px;align-items:center;margin-top:12px}
   </style>
 </head>
@@ -26,51 +26,50 @@
   <div id="log"></div>
 
   <script>
+    // ------- configure easily -------
+    const VOICE = "aria"; // try "serena" or "alloy" if you want
+    // --------------------------------
+
     let restarting = false;
+
     const logEl = document.getElementById("log");
     const statusEl = document.getElementById("status");
     const startBtn = document.getElementById("start");
     const hangupBtn = document.getElementById("hangup");
     const remoteAudio = document.getElementById("remoteAudio");
+
     let pc = null, localStream = null;
 
     function log(msg){ const p=document.createElement("div"); p.textContent=msg; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
     function setStatus(s){ statusEl.textContent = s; }
 
     async function start() {
+      startBtn.disabled = true;
+      hangupBtn.disabled = false;
+
       try {
         setStatus("requesting mic…");
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         setStatus("mic granted");
 
-        // our serverless function on the same domain
-        const tokenRes = await fetch("/api/realtime-session");
+        // Fetch ephemeral token from our serverless function (with voice override)
+        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(VOICE)}`);
         const token = await tokenRes.json();
         if (!token?.client_secret?.value) { log("Failed to get token"); return; }
 
         pc = new RTCPeerConnection();
+
         pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; };
         pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
-pc.onconnectionstatechange = () => {
-  log("pc state: " + pc.connectionState);
-  if (["disconnected", "failed"].includes(pc.connectionState)) {
-    log("Connection dropped — restarting…");
-    hangup();   // clean up
-    start();    // start a fresh session
-  }
-};
-pc.onconnectionstatechange = () => {
-  log("pc state: " + pc.connectionState);
-  if (["disconnected", "failed"].includes(pc.connectionState) && !restarting) {
-    restarting = true;
-    log("Connection dropped — restarting…");
-    setTimeout(() => {
-      hangup();   // clean up
-      start();    // fresh session
-      restarting = false;
-    }, 400);      // brief pause avoids rapid loops
-  }
-};
+
+        pc.onconnectionstatechange = () => {
+          log("pc state: " + pc.connectionState);
+          if (["disconnected","failed"].includes(pc.connectionState) && !restarting) {
+            restarting = true;
+            log("Connection dropped — restarting…");
+            setTimeout(() => { hangup(); start(); restarting = false; }, 400);
+          }
+        };
 
         localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
@@ -95,6 +94,8 @@ pc.onconnectionstatechange = () => {
       } catch (err) {
         log("Error: " + err);
         setStatus("error");
+        startBtn.disabled = false;
+        hangupBtn.disabled = true;
       }
     }
 
@@ -105,11 +106,15 @@ pc.onconnectionstatechange = () => {
       } finally {
         pc = null; localStream = null;
         setStatus("ended"); log("Call ended.");
+        startBtn.disabled = false;
+        hangupBtn.disabled = true;
       }
     }
 
     startBtn.onclick = start;
     hangupBtn.onclick = hangup;
+    // start with Hang Up disabled
+    hangupBtn.disabled = true;
   </script>
 </body>
 </html>
