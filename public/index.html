@@ -8,8 +8,9 @@
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 16px}
     .btn{padding:12px 18px;border-radius:10px;border:0;background:#6d28d9;color:#fff;font-weight:600;cursor:pointer}
     #status{margin-left:10px;color:#4b5563}
-    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:200px;overflow:auto;border:1px solid #e5e7eb}
+    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:220px;overflow:auto;border:1px solid #e5e7eb;font-size:14px;line-height:1.4}
     .row{display:flex;gap:10px;align-items:center;margin-top:12px}
+    .select{padding:10px;border-radius:10px;border:1px solid #e5e7eb}
   </style>
 </head>
 <body>
@@ -19,6 +20,13 @@
   <div class="row">
     <button id="start" class="btn">Start</button>
     <button id="hangup" class="btn" style="background:#ef6c00;">Hang Up</button>
+    <label>Voice:
+      <select id="voice" class="select">
+        <option value="aria" selected>Aria (female, bright)</option>
+        <option value="serena">Serena (female, warm)</option>
+        <option value="alloy">Alloy (neutral)</option>
+      </select>
+    </label>
     <span id="status">idle</span>
   </div>
 
@@ -26,11 +34,12 @@
   <div id="log"></div>
 
   <script>
-    // ------- configure easily -------
-    const VOICE = "aria"; // try "serena" or "alloy" if you want
-    // --------------------------------
+    // ------- config via UI -------
+    const voiceSel = document.getElementById("voice");
+    // -----------------------------
 
     let restarting = false;
+    let disconnectTimer = null;
 
     const logEl = document.getElementById("log");
     const statusEl = document.getElementById("status");
@@ -40,7 +49,12 @@
 
     let pc = null, localStream = null;
 
-    function log(msg){ const p=document.createElement("div"); p.textContent=msg; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
+    function log(msg){
+      const p=document.createElement("div");
+      p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(p);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
     function setStatus(s){ statusEl.textContent = s; }
 
     async function start() {
@@ -52,8 +66,9 @@
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         setStatus("mic granted");
 
-        // Fetch ephemeral token from our serverless function (with voice override)
-        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(VOICE)}`);
+        // Fetch ephemeral token with chosen voice
+        const v = voiceSel.value || "aria";
+        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}`);
         const token = await tokenRes.json();
         if (!token?.client_secret?.value) { log("Failed to get token"); return; }
 
@@ -62,17 +77,38 @@
         pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; };
         pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
 
+        // Debounced restart: only restart if 'failed' immediately,
+        // or 'disconnected' persists for 2s (often it recovers).
         pc.onconnectionstatechange = () => {
           log("pc state: " + pc.connectionState);
-          if (["disconnected","failed"].includes(pc.connectionState) && !restarting) {
+
+          if (pc.connectionState === "failed" && !restarting) {
             restarting = true;
-            log("Connection dropped — restarting…");
-            setTimeout(() => { hangup(); start(); restarting = false; }, 400);
+            log("Connection failed — restarting…");
+            setTimeout(() => { hangup(); start(); restarting = false; }, 500);
+          }
+
+          if (pc.connectionState === "disconnected") {
+            if (!disconnectTimer) {
+              disconnectTimer = setTimeout(() => {
+                if (pc && pc.connectionState === "disconnected" && !restarting) {
+                  restarting = true;
+                  log("Still disconnected — restarting…");
+                  hangup(); start(); restarting = false;
+                }
+                disconnectTimer = null;
+              }, 2000);
+            }
+          } else if (disconnectTimer && ["connected","connecting"].includes(pc.connectionState)) {
+            clearTimeout(disconnectTimer);
+            disconnectTimer = null;
           }
         };
 
+        // Send mic upstream
         localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
+        // SDP offer/answer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
@@ -113,7 +149,6 @@
 
     startBtn.onclick = start;
     hangupBtn.onclick = hangup;
-    // start with Hang Up disabled
     hangupBtn.disabled = true;
   </script>
 </body>
