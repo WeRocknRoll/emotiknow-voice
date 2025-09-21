@@ -31,7 +31,7 @@ export default async function handler(req, res) {
           type: "server_vad",
           threshold: 0.6,
           prefix_padding_ms: 250,
-          silence_duration_ms: 1200, // bump down/up if it still cuts early/late
+          silence_duration_ms: 1400, // bump down/up if it still cuts early/late
         },
         instructions: `You are Emma, EmotiKnow’s calm, supportive companion.
 Speak clearly and warmly. Keep answers concise unless asked for depth.
