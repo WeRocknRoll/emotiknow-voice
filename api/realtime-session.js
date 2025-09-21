@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-realtime-preview",
-        voice: "verse",
+        voice: "serena",
         turn_detection: {
           type: "server_vad",
           threshold: 0.6,
