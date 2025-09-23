@@ -3,39 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EmotiKnow – Live Voice Chat</title>
+  <title>EmotiKnow – Emma (Cheaper + Stable)</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 16px}
     .btn{padding:12px 18px;border-radius:10px;border:0;background:#6d28d9;color:#fff;font-weight:600;cursor:pointer}
     #status{margin-left:10px;color:#4b5563}
     #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:220px;overflow:auto;border:1px solid #e5e7eb;font-size:14px;line-height:1.4}
-    .row{display:flex;gap:10px;align-items:center;margin-top:12px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
     .select{padding:10px;border-radius:10px;border:1px solid #e5e7eb}
+    label{display:flex;align-items:center;gap:6px}
   </style>
 </head>
 <body>
-  <h1>EmotiKnow – Live Voice Chat</h1>
-  <p>Click <b>Start</b> once to allow mic. After that, just talk; Emma will answer without extra clicks.</p>
+  <h1>EmotiKnow – Emma (Voice Companion)</h1>
+  <p>Click <b>Start</b> once to allow mic. Emma runs on a cheaper realtime model, auto-pauses on silence, and reconnects if needed.</p>
 
   <div class="row">
     <button id="start" class="btn">Start</button>
     <button id="hangup" class="btn" style="background:#ef6c00;">Hang Up</button>
+
     <label>Voice:
       <select id="voice" class="select">
-  <option value="shimmer" selected>Shimmer (female, bright)</option>
-  <option value="coral">Coral (female, clear)</option>
-  <option value="sage">Sage (female, soft)</option>
-  <option value="marin">Marin (female, warm)</option>
-  <option value="ballad">Ballad (feminine, lyrical)</option>
-  <option value="verse">Verse (neutral)</option>
-  <option value="alloy">Alloy (neutral)</option>
-  <option value="echo">Echo</option>
-  <option value="ash">Ash</option>
-  <option value="cedar">Cedar</option>
-</select>
-
+        <option value="shimmer" selected>Shimmer (female, bright)</option>
+        <option value="coral">Coral (female, clear)</option>
+        <option value="sage">Sage (female, soft)</option>
+        <option value="marin">Marin (female, warm)</option>
+        <option value="ballad">Ballad (feminine, lyrical)</option>
+        <option value="verse">Verse (neutral)</option>
+        <option value="alloy">Alloy (neutral)</option>
+        <option value="echo">Echo</option>
+        <option value="ash">Ash</option>
+        <option value="cedar">Cedar</option>
       </select>
     </label>
+
+    <label>Max session:
+      <select id="maxmins" class="select">
+        <option value="20" selected>20 min</option>
+        <option value="30">30 min</option>
+        <option value="10">10 min</option>
+      </select>
+    </label>
+
     <span id="status">idle</span>
   </div>
 
@@ -43,28 +52,57 @@
   <div id="log"></div>
 
   <script>
-    // ------- config via UI -------
-    const voiceSel = document.getElementById("voice");
-    // -----------------------------
+    // ----- Cheap model by default (≈5x cheaper) -----
+    const MODEL = "gpt-4o-mini-realtime-preview";
+
+    // ----- Silence cutoff + watchdog settings -----
+    const SILENCE_CUTOFF_MS = 8000;   // if no user speech for 8s → hangup (saves $$)
+    const WATCHDOG_QUIET_MS = 20000;  // if connected but quiet for 20s → try ICE restart
 
     let restarting = false;
     let disconnectTimer = null;
+    let icedOnce = false;
+    let lastUserMicActivity = Date.now();
+    let lastAnyActivity = Date.now();
+    let keepAliveInterval = null;
+    let silenceTimer = null;
+    let sessionEndTimer = null;
 
     const logEl = document.getElementById("log");
     const statusEl = document.getElementById("status");
     const startBtn = document.getElementById("start");
     const hangupBtn = document.getElementById("hangup");
+    const voiceSel = document.getElementById("voice");
+    const maxminsSel = document.getElementById("maxmins");
     const remoteAudio = document.getElementById("remoteAudio");
 
-    let pc = null, localStream = null;
+    let pc = null, localStream = null, audioCtx = null, analyser = null, micSource = null, rafId = null;
 
-    function log(msg){
-      const p=document.createElement("div");
-      p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logEl.appendChild(p);
-      logEl.scrollTop = logEl.scrollHeight;
-    }
+    function log(msg){ const p=document.createElement("div"); p.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
     function setStatus(s){ statusEl.textContent = s; }
+
+    function setMicEnabled(enabled){
+      if (!localStream) return;
+      localStream.getAudioTracks().forEach(t => t.enabled = enabled);
+    }
+
+    function startSilenceTimer() {
+      clearSilenceTimer();
+      silenceTimer = setTimeout(() => {
+        log(`No user speech for ${SILENCE_CUTOFF_MS/1000}s — ending to save cost`);
+        hangup();
+      }, SILENCE_CUTOFF_MS);
+    }
+    function clearSilenceTimer() { if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer=null; } }
+
+    function startSessionEndTimer(minutes) {
+      clearSessionEndTimer();
+      sessionEndTimer = setTimeout(() => {
+        log(`Session limit ${minutes} min reached — ending`);
+        hangup();
+      }, minutes * 60 * 1000);
+    }
+    function clearSessionEndTimer(){ if (sessionEndTimer){ clearTimeout(sessionEndTimer); sessionEndTimer=null; } }
 
     async function start() {
       startBtn.disabled = true;
@@ -72,32 +110,61 @@
 
       try {
         setStatus("requesting mic…");
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
         setStatus("mic granted");
 
-        // Fetch ephemeral token with chosen voice
-        const v = voiceSel.value || "aria";
-        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}`);
+        // Mic level monitor for user-speech detection (cheap silence cutoff)
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        micSource = audioCtx.createMediaStreamSource(localStream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        micSource.connect(analyser);
+
+        const buf = new Uint8Array(analyser.frequencyBinCount);
+        const readLevel = () => {
+          analyser.getByteTimeDomainData(buf);
+          // compute simple amplitude
+          let sum = 0;
+          for (let i=0;i<buf.length;i++){ const v = (buf[i]-128)/128; sum += v*v; }
+          const rms = Math.sqrt(sum/buf.length);
+          // if above very small threshold, consider it user speech/noise
+          if (rms > 0.02) { lastUserMicActivity = Date.now(); lastAnyActivity = Date.now(); startSilenceTimer(); }
+          rafId = requestAnimationFrame(readLevel);
+        };
+        rafId = requestAnimationFrame(readLevel);
+
+        // Fetch ephemeral token using the selected voice + cheaper model
+        const v = voiceSel.value || "shimmer";
+        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}&model=${encodeURIComponent(MODEL)}`);
+        if (!tokenRes.ok) {
+          const t = await tokenRes.text();
+          throw new Error(`Token error (${tokenRes.status}): ${t}`);
+        }
         const token = await tokenRes.json();
-        if (!token?.client_secret?.value) { log("Failed to get token"); return; }
+        if (!token?.client_secret?.value) throw new Error("No client_secret in token response");
 
         pc = new RTCPeerConnection();
 
-        pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; };
-        pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
+        pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; lastAnyActivity = Date.now(); };
+        pc.oniceconnectionstatechange = () => { log("ice: " + pc.iceConnectionState); lastAnyActivity = Date.now(); };
 
-        // Debounced restart: only restart if 'failed' immediately,
-        // or 'disconnected' persists for 2s (often it recovers).
+        // Reconnect logic: ICE restart first, then full restart if needed
         pc.onconnectionstatechange = () => {
           log("pc state: " + pc.connectionState);
 
           if (pc.connectionState === "failed" && !restarting) {
             restarting = true;
             log("Connection failed — restarting…");
-            setTimeout(() => { hangup(); start(); restarting = false; }, 500);
+            setTimeout(() => { hangup(); start(); restarting = false; }, 600);
           }
 
           if (pc.connectionState === "disconnected") {
+            if (!icedOnce) {
+              icedOnce = true;
+              try { log("Disconnected — attempting ICE restart"); pc.restartIce?.(); } catch {}
+            }
             if (!disconnectTimer) {
               disconnectTimer = setTimeout(() => {
                 if (pc && pc.connectionState === "disconnected" && !restarting) {
@@ -106,22 +173,39 @@
                   hangup(); start(); restarting = false;
                 }
                 disconnectTimer = null;
-              }, 2000);
+              }, 2500);
             }
-          } else if (disconnectTimer && ["connected","connecting"].includes(pc.connectionState)) {
-            clearTimeout(disconnectTimer);
-            disconnectTimer = null;
+          } else {
+            icedOnce = false;
+            if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
           }
         };
+
+        // Half-duplex gating to avoid Emma interrupting herself via mic echo:
+        remoteAudio.addEventListener("playing", () => { setMicEnabled(false); });
+        let resumeTimer = null;
+        const resumeMic = () => { setMicEnabled(true); startSilenceTimer(); };
+        remoteAudio.addEventListener("pause", () => {
+          if (resumeTimer) clearTimeout(resumeTimer);
+          resumeTimer = setTimeout(resumeMic, 400);
+        });
+        remoteAudio.addEventListener("timeupdate", () => {
+          if (remoteAudio.paused) return;
+          const almostDone = remoteAudio.duration && (remoteAudio.duration - remoteAudio.currentTime < 0.35);
+          if (almostDone) {
+            if (resumeTimer) clearTimeout(resumeTimer);
+            resumeTimer = setTimeout(resumeMic, 300);
+          }
+        });
 
         // Send mic upstream
         localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
-        // SDP offer/answer
+        // SDP offer/answer with cheaper model
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        const sdpRes = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview", {
+        const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(MODEL)}`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token.client_secret.value}`,
@@ -135,7 +219,24 @@
         await pc.setRemoteDescription({ type: "answer", sdp: answerSDP });
 
         setStatus("live (hands-free) ✨");
-        log("Session established. Speak anytime. You can interrupt Emma.");
+        log(`Session established on ${MODEL}. Voice: ${v}.`);
+
+        // Start silence cutoff + session limit timers
+        startSilenceTimer();
+        const maxMins = parseInt(maxminsSel.value || "20", 10);
+        startSessionEndTimer(maxMins);
+
+        // Keep-alive: poke stats every 10s + nudge if quiet 20s
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
+        keepAliveInterval = setInterval(async () => {
+          try { await pc?.getStats?.(); } catch {}
+          if (pc && pc.connectionState === "connected" && Date.now() - lastAnyActivity > WATCHDOG_QUIET_MS) {
+            log("Watchdog: quiet for 20s — attempting ICE restart");
+            try { pc.restartIce?.(); } catch {}
+            lastAnyActivity = Date.now();
+          }
+        }, 10000);
+
       } catch (err) {
         log("Error: " + err);
         setStatus("error");
@@ -144,12 +245,18 @@
       }
     }
 
-    function hangup(){
-      try{
+    function hangup() {
+      try {
         if (pc) pc.close();
         if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (rafId) cancelAnimationFrame(rafId);
+        if (audioCtx) audioCtx.close();
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
+        clearSilenceTimer();
+        clearSessionEndTimer();
       } finally {
-        pc = null; localStream = null;
+        pc = null; localStream = null; audioCtx = null; analyser = null; micSource = null; rafId = null;
+        restarting = false; icedOnce = false;
         setStatus("ended"); log("Call ended.");
         startBtn.disabled = false;
         hangupBtn.disabled = true;
