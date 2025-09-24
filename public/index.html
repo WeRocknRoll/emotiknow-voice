@@ -1,261 +1,152 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EmotiKnow – Emma (Voice Companion)</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:840px;margin:40px auto;padding:0 16px}
-    .btn{padding:12px 18px;border-radius:10px;border:0;background:#6d28d9;color:#fff;font-weight:600;cursor:pointer}
-    #status{margin-left:10px;color:#4b5563}
-    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:240px;overflow:auto;border:1px solid #e5e7eb;font-size:14px;line-height:1.4}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-    .select{padding:10px;border-radius:10px;border:1px solid #e5e7eb}
-    label{display:flex;align-items:center;gap:6px}
-  </style>
-</head>
-<body>
-  <h1>EmotiKnow – Emma (Voice Companion)</h1>
-  <p>Click <b>Start</b> and talk naturally. Emma uses a cheaper model when possible and falls back automatically if needed.</p>
+<audio id="remoteAudio" autoplay playsinline></audio>
 
-  <div class="row">
-    <button id="start" class="btn">Start</button>
-    <button id="hangup" class="btn" style="background:#ef6c00;">Hang Up</button>
+<script>
+  const logEl = document.getElementById("log");
+  const statusEl = document.getElementById("status");
+  const startBtn = document.getElementById("start");
+  const hangupBtn = document.getElementById("hangup");
+  const remoteAudio = document.getElementById("remoteAudio");
 
-    <label>Voice:
-      <select id="voice" class="select">
-        <option value="shimmer" selected>Shimmer (female, bright)</option>
-        <option value="coral">Coral (female, clear)</option>
-        <option value="sage">Sage (female, soft)</option>
-        <option value="marin">Marin (female, warm)</option>
-        <option value="ballad">Ballad (feminine, lyrical)</option>
-        <option value="verse">Verse (neutral)</option>
-        <option value="alloy">Alloy (neutral)</option>
-        <option value="echo">Echo</option>
-        <option value="ash">Ash</option>
-        <option value="cedar">Cedar</option>
-      </select>
-    </label>
+  let pc = null, localStream = null, audioCtx = null, noSpeechTimer = null;
 
-    <label>Max session:
-      <select id="maxmins" class="select">
-        <option value="20" selected>20 min</option>
-        <option value="30">30 min</option>
-        <option value="10">10 min</option>
-      </select>
-    </label>
+  function log(msg){
+    const p = document.createElement("div");
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(s){ statusEl.textContent = s; }
 
-    <span id="status">idle</span>
-  </div>
+  // Helper: (re)start the "no speech" timer
+  function armNoSpeechTimer(ms = 20000){           // 20s (was 8s)
+    clearNoSpeechTimer();
+    noSpeechTimer = setTimeout(() => {
+      log(`No user speech for ${ms/1000}s — ending to save cost`);
+      hangup();
+    }, ms);
+  }
+  function clearNoSpeechTimer(){
+    if (noSpeechTimer) clearTimeout(noSpeechTimer);
+    noSpeechTimer = null;
+  }
 
-  <audio id="remoteAudio" autoplay></audio>
-  <div id="log"></div>
+  async function start(){
+    try {
+      // 1) Create/Resume AudioContext so the browser is allowed to play audio
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") await audioCtx.resume();
 
-  <script>
-    // -------- Models & Policies --------
-    const MINI_MODEL = "gpt-4o-mini-realtime-preview";
-    const FULL_MODEL = "gpt-4o-realtime-preview"; // fallback
-    const SILENCE_CUTOFF_MS = 8000;   // end session on 8s of user silence (saves $)
-    const WATCHDOG_QUIET_MS = 20000;  // try ICE restart if quiet 20s
+      // 2) Ask for microphone
+      setStatus("requesting mic…");
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      setStatus("mic granted");
 
-    // -------- State --------
-    let restarting = false, disconnectTimer = null, icedOnce = false;
-    let lastAnyActivity = Date.now();
-    let keepAliveInterval = null, silenceTimer = null, sessionEndTimer = null;
+      // Arm no-speech timeout as soon as we have a mic
+      armNoSpeechTimer();
 
-    const logEl = document.getElementById("log");
-    const statusEl = document.getElementById("status");
-    const startBtn = document.getElementById("start");
-    const hangupBtn = document.getElementById("hangup");
-    const voiceSel = document.getElementById("voice");
-    const maxminsSel = document.getElementById("maxmins");
-    const remoteAudio = document.getElementById("remoteAudio");
+      // 3) Fetch a realtime token from our server
+      const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(document.getElementById('voice').value || 'shimmer')}`);
+      const token = await tokenRes.json();
+      if (!token?.client_secret?.value) {
+        log("Failed to get token");
+        return;
+      }
 
-    let pc = null, localStream = null, audioCtx = null, analyser = null, micSource = null, rafId = null;
+      // 4) Create PeerConnection
+      pc = new RTCPeerConnection();
 
-    function log(msg){ const p=document.createElement("div"); p.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
-    function setStatus(s){ statusEl.textContent = s; }
-    function setMicEnabled(enabled){ if (!localStream) return; localStream.getAudioTracks().forEach(t => t.enabled = enabled); }
-
-    function startSilenceTimer() { clearSilenceTimer(); silenceTimer = setTimeout(() => { log(`No user speech for ${SILENCE_CUTOFF_MS/1000}s — ending to save cost`); hangup(); }, SILENCE_CUTOFF_MS); }
-    function clearSilenceTimer() { if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer=null; } }
-    function startSessionEndTimer(minutes){ clearSessionEndTimer(); sessionEndTimer = setTimeout(()=>{ log(`Session limit ${minutes} min reached — ending`); hangup(); }, minutes*60*1000); }
-    function clearSessionEndTimer(){ if (sessionEndTimer){ clearTimeout(sessionEndTimer); sessionEndTimer=null; } }
-
-    startBtn.onclick = start;
-    hangupBtn.onclick = hangup;
-    hangupBtn.disabled = true;
-
-    async function start() {
-      startBtn.disabled = true; hangupBtn.disabled = false;
-
-      try {
-        setStatus("requesting mic…");
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        });
-        setStatus("mic granted");
-
-        // AudioContext must be resumed on user gesture (autoplay policy)
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        await audioCtx.resume();
-
-        // Simple mic analyser to detect speech (for silence cutoff)
-        const src = audioCtx.createMediaStreamSource(localStream);
-        analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser);
-        const buf = new Uint8Array(analyser.frequencyBinCount);
-        const tick = () => {
-          analyser.getByteTimeDomainData(buf);
-          let sum=0; for (let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
-          const rms=Math.sqrt(sum/buf.length);
-          if (rms>0.02){ lastAnyActivity=Date.now(); startSilenceTimer(); }
-          rafId=requestAnimationFrame(tick);
-        };
-        rafId=requestAnimationFrame(tick);
-
-        // Try mini first, then auto-fallback to full model
-        const v = voiceSel.value || "shimmer";
-        const okMini = await establishSessionWithModel(v, MINI_MODEL);
-        if (!okMini) {
-          log("Mini model failed — trying full model…");
-          const okFull = await establishSessionWithModel(v, FULL_MODEL);
-          if (!okFull) throw new Error("Both models failed to establish a session");
+      // 5) Attach REMOTE audio
+      pc.ontrack = (e) => {
+        log(`ontrack received (kind=${e.track.kind})`);
+        remoteAudio.srcObject = e.streams[0];
+        remoteAudio.muted = false;
+        remoteAudio.volume = 1.0;
+        const p = remoteAudio.play();
+        if (p && typeof p.then === "function") {
+          p.catch(err => log("audio play blocked: " + err.message));
         }
+      };
 
-        setStatus("live (hands-free) ✨");
-        startSilenceTimer();
-        const maxMins = parseInt(maxminsSel.value || "20", 10);
-        startSessionEndTimer(maxMins);
+      // Optional: see ICE progress
+      pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
+      pc.onconnectionstatechange    = () => log("pc state: " + pc.connectionState);
 
-        // Keep-alive: poke stats every 10s; if quiet for 20s, nudge ICE
-        if (keepAliveInterval) clearInterval(keepAliveInterval);
-        keepAliveInterval = setInterval(async () => {
-          try { await pc?.getStats?.(); } catch {}
-          if (pc && pc.connectionState === "connected" && Date.now()-lastAnyActivity > WATCHDOG_QUIET_MS) {
-            log("Watchdog: quiet for 20s — attempting ICE restart");
-            try { pc.restartIce?.(); } catch {}
-            lastAnyActivity = Date.now();
-          }
-        }, 10000);
+      // 6) Add LOCAL mic tracks to PC
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
-      } catch (err) {
-        log("Error: " + err);
-        setStatus("error");
-        startBtn.disabled = false; hangupBtn.disabled = true;
-      }
-    }
+      // 7) Create offer & set local description
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    async function establishSessionWithModel(voice, modelName) {
-      try {
-        // Get ephemeral token (server returns JSON or a clear error JSON)
-        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}&model=${encodeURIComponent(modelName)}`);
-        if (!tokenRes.ok) { log(`Token error (${modelName}) [${tokenRes.status}]: ${await tokenRes.text()}`); return false; }
-        const token = await tokenRes.json();
-        if (!token?.client_secret?.value) { log(`No client_secret for ${modelName}`); return false; }
+      // 8) Send SDP to OpenAI Realtime, get answer
+      const baseUrl = "https://api.openai.com/v1/realtime";
+      const model   = "gpt-4o-mini-realtime-preview";
+      const sdpRes = await fetch(`${baseUrl}?model=${model}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/sdp",
+          "Authorization": `Bearer ${token.client_secret.value}`,
+          "OpenAI-Beta": "realtime=v1"
+        },
+        body: offer.sdp
+      });
 
-        // Peer connection
-        pc = new RTCPeerConnection();
+      const answer = { type: "answer", sdp: await sdpRes.text() };
+      await pc.setRemoteDescription(answer);
 
-        // Audio: on incoming track, attach and force play (fix autoplay)
-        pc.ontrack = (e) => {
-          remoteAudio.srcObject = e.streams[0];
-          remoteAudio.muted = false;
-          remoteAudio.play().catch(err => log("Audio play blocked: " + err));
-          lastAnyActivity = Date.now();
-        };
+      log(`Session established on ${model}. Voice: ${document.getElementById('voice').value}`);
 
-        pc.oniceconnectionstatechange = () => { log("ice: " + pc.iceConnectionState); lastAnyActivity = Date.now(); };
+      // 9) Anytime we detect mic data flowing, keep the line alive
+      localStream.getAudioTracks().forEach(track => {
+        track.onended    = () => log("mic track ended");
+        track.onmute     = () => log("mic muted");
+        track.onunmute   = () => log("mic unmuted");
+        track.onisolationchange = () => log("mic isolation change");
+      });
 
-        // Robust connection state handling (ICE restart → full restart)
-        pc.onconnectionstatechange = () => {
-          log("pc state: " + pc.connectionState);
-
-          if (pc.connectionState === "failed" && !restarting) {
-            restarting = true; log("Connection failed — restarting…");
-            setTimeout(() => { hangup(); start(); restarting = false; }, 600);
-          }
-
-          if (pc.connectionState === "disconnected") {
-            if (!icedOnce) { icedOnce = true; try { log("Disconnected — attempting ICE restart"); pc.restartIce?.(); } catch {} }
-            if (!disconnectTimer) {
-              disconnectTimer = setTimeout(() => {
-                if (pc && pc.connectionState === "disconnected" && !restarting) {
-                  restarting = true; log("Still disconnected — restarting…");
-                  hangup(); start(); restarting = false;
-                }
-                disconnectTimer = null;
-              }, 2500);
-            }
-          } else {
-            icedOnce = false;
-            if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
-          }
-        };
-
-        // Echo guard (half-duplex): mute mic while Emma speaks
-        remoteAudio.addEventListener("playing", () => { setMicEnabled(false); });
-        let resumeTimer = null;
-        const resumeMic = () => { setMicEnabled(true); startSilenceTimer(); };
-        remoteAudio.addEventListener("pause", () => { if (resumeTimer) clearTimeout(resumeTimer); resumeTimer = setTimeout(resumeMic, 400); });
-        remoteAudio.addEventListener("timeupdate", () => {
-          if (remoteAudio.paused) return;
-          const almostDone = remoteAudio.duration && (remoteAudio.duration - remoteAudio.currentTime < 0.35);
-          if (almostDone) { if (resumeTimer) clearTimeout(resumeTimer); resumeTimer = setTimeout(resumeMic, 300); }
-        });
-
-        // Send mic upstream
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
-        // Offer/Answer with chosen model
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(modelName)}`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token.client_secret.value}`,
-            "Content-Type": "application/sdp",
-            "OpenAI-Beta": "realtime=v1"
-          },
-          body: offer.sdp
-        });
-
-        const answerText = await sdpRes.text();
-        if (!sdpRes.ok) {
-          log(`SDP error (${modelName}) [${sdpRes.status}]: ${answerText}`);
-          try { pc.close(); } catch {}
-          pc = null;
-          return false;
+      // 10) Reset no-speech timer when we detect user start speaking (via volume meter)
+      // Lightweight meter
+      const meterSrc = audioCtx.createMediaStreamSource(localStream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      meterSrc.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      (function pump(){
+        analyser.getByteTimeDomainData(data);
+        // crude voice activity check
+        let maxDev = 0;
+        for (let i=0;i<data.length;i++){
+          const dev = Math.abs(data[i]-128);
+          if (dev > maxDev) maxDev = dev;
         }
+        if (maxDev > 8) armNoSpeechTimer(); // user made a sound -> extend timer
+        if (pc && pc.connectionState !== "closed") requestAnimationFrame(pump);
+      })();
 
-        await pc.setRemoteDescription({ type: "answer", sdp: answerText });
-        log(`Session established on ${modelName}. Voice: ${voice}.`);
-        // Force play once more (some browsers need it after SRD)
-        remoteAudio.play().catch(err => log("Audio play (post-answer) blocked: " + err));
-        return true;
-      } catch (e) {
-        log(`establishSessionWithModel(${modelName}) failed: ` + e);
-        try { pc?.close(); } catch {}
-        pc = null;
-        return false;
-      }
+    } catch (err) {
+      log("Error: " + (err?.message || err));
+      hangup();
     }
+  }
 
-    function hangup() {
-      try {
-        if (pc) pc.close();
-        if (localStream) localStream.getTracks().forEach(t => t.stop());
-        if (rafId) cancelAnimationFrame(rafId);
-        if (audioCtx) audioCtx.close();
-        if (keepAliveInterval) clearInterval(keepAliveInterval);
-        clearSilenceTimer(); clearSessionEndTimer();
-      } finally {
-        pc = null; localStream = null; audioCtx = null; analyser = null; micSource = null; rafId = null;
-        restarting = false; icedOnce = false;
-        setStatus("ended"); log("Call ended.");
-        startBtn.disabled = false; hangupBtn.disabled = true;
+  function hangup(){
+    try {
+      if (pc) {
+        pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch{} });
+        pc.close();
       }
-    }
-  </script>
-</body>
-</html>
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+    } catch {}
+    pc = null;
+    localStream = null;
+    clearNoSpeechTimer();
+    log("Call ended.");
+    setStatus("ended");
+  }
+
+  document.getElementById("voice").addEventListener("change", () => log("voice: " + document.getElementById("voice").value));
+  startBtn.onclick = start;
+  hangupBtn.onclick = hangup;
+</script>
