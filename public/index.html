@@ -2,53 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>EmotiKnow — Emma (Voice Companion)</title>
   <style>
     :root{
       --bg:#0c1116; --panel:#121821; --ink:#e6edf3; --muted:#9da7b3;
       --accent:#8b5cf6; --accent-2:#f59e0b; --border:#223044;
-      --ok:#34d399; --bad:#ef4444;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji";
+      --ok:#34d399; --bad:#ef4444; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
     }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:linear-gradient(180deg,#0c1116,#0b1420 40%,#0a1726);
-      color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased
-    }
-    .wrap{
-      max-width:1100px; margin:32px auto; padding:16px;
-    }
-    .card{
-      background:var(--panel); border:1px solid var(--border);
-      border-radius:16px; padding:24px 24px 18px;
-      box-shadow:0 6px 20px rgba(0,0,0,.25)
-    }
-    h1{margin:0 0 10px; font-size:34px; line-height:1.15}
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0; background:linear-gradient(180deg,#0c1116,#0b1420 40%,#0a1726);
+      color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased}
+    .wrap{max-width:1100px; margin:32px auto; padding:16px;}
+    .card{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:24px 24px 18px; box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    h1{margin:0 0 10px; font-size:34px}
     .note{color:var(--muted); margin:0 0 18px}
     .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px}
-    select, button{
-      height:44px; border-radius:10px; border:1px solid var(--border);
-      background:#0f1622; color:var(--ink); padding:0 14px; font-size:15px
-    }
-    button{
-      background:var(--accent); border:none; font-weight:650; cursor:pointer
-    }
-    button.warn{ background:var(--accent-2); color:#1b1305 }
+    select,button{height:44px; border-radius:10px; border:1px solid var(--border); background:#0f1622; color:var(--ink); padding:0 14px; font-size:15px}
+    button{background:var(--accent); border:none; font-weight:650; cursor:pointer}
+    button.warn{background:var(--accent-2); color:#1b1305}
     button:disabled{opacity:.6; cursor:not-allowed}
     .status{margin-left:auto; color:#9ae6b4; font-weight:600}
     .status.bad{color:#fecaca}
-    .log{
-      margin-top:10px;
-      background:#0b1320; border:1px solid var(--border); border-radius:12px;
-      min-height:320px; padding:14px; font-family:var(--mono); font-size:13px;
-      white-space:pre-wrap; overflow:auto
-    }
+    .log{margin-top:10px; background:#0b1320; border:1px solid var(--border); border-radius:12px; min-height:320px; padding:14px; font-family:var(--mono); font-size:13px; white-space:pre-wrap; overflow:auto}
     .tip{color:var(--muted); font-size:13px; text-align:center; margin-top:10px}
     .sr-only{position:absolute; left:-9999px}
   </style>
@@ -57,16 +34,14 @@
   <div class="wrap">
     <div class="card">
       <h1>EmotiKnow — Emma (Voice Companion)</h1>
-      <p class="note">
-        Click <b>Start</b> once to allow your microphone. Talk naturally; Emma replies in real time.
-      </p>
+      <p class="note">Click <b>Start</b> once to allow your microphone. Talk naturally; Emma replies in real time.</p>
 
       <div class="row">
-        <button id="start" title="Start the conversation">Start</button>
+        <button id="start">Start</button>
         <button id="hangup" class="warn" disabled>Hang Up</button>
 
         <label for="voice" class="sr-only">Voice</label>
-        <select id="voice" title="Choose Emma's voice">
+        <select id="voice">
           <option value="shimmer" selected>Shimmer (female, bright)</option>
           <option value="coral">Coral (female, clear)</option>
           <option value="sage">Sage (female, soft)</option>
@@ -79,32 +54,21 @@
           <option value="cedar">Cedar</option>
         </select>
 
-        <button id="test" title="Play a short beep to confirm speakers work">Test speaker</button>
-
+        <button id="test">Test speaker</button>
         <span id="status" class="status">ended</span>
       </div>
 
       <div id="log" class="log" aria-live="polite"></div>
-      <p class="tip">
-        Tip: If you don’t hear Emma, click <b>Test speaker</b> once and then click <b>Start</b> again
-        (browsers sometimes block autoplay).
-      </p>
+      <p class="tip">Tip: If you don’t hear Emma, click <b>Test speaker</b> then click <b>Start</b> again (autoplay). If Emma goes quiet, just speak again—she’ll pick it up.</p>
     </div>
   </div>
 
-  <!-- Hidden audio element for remote track -->
   <audio id="remote" class="sr-only" autoplay playsinline></audio>
 
   <script>
-    // ==========================
-    //  Configuration
-    // ==========================
-    const TOKEN_ENDPOINT = "/api/realtime-session"; // your serverless function path
-    const SDP_ENDPOINT   = (model) => `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
+    const TOKEN_ENDPOINT = "/api/realtime-session";
+    const SDP_ENDPOINT = (model)=>`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
 
-    // ==========================
-    //  Elements & small helpers
-    // ==========================
     const els = {
       start:  document.getElementById("start"),
       hangup: document.getElementById("hangup"),
@@ -115,201 +79,137 @@
       remote: document.getElementById("remote"),
     };
 
-    function log(...args){
-      const time = new Date().toLocaleTimeString();
-      const msg = `[${time}] ${args.join(" ")}`;
-      els.log.appendChild(document.createTextNode(msg + "\n"));
-      els.log.scrollTop = els.log.scrollHeight;
-      console.log(msg);
-    }
-    function setStatus(text, bad=false){
-      els.status.textContent = text;
-      els.status.classList.toggle("bad", !!bad);
-    }
+    function log(...a){ const msg = `[${new Date().toLocaleTimeString()}] ${a.join(" ")}`;
+      els.log.appendChild(document.createTextNode(msg + "\n")); els.log.scrollTop = els.log.scrollHeight; console.log(msg);}
+    function setStatus(t,bad=false){ els.status.textContent=t; els.status.classList.toggle("bad", !!bad); }
 
-    // ==========================
-    //  State
-    // ==========================
-    let pc = null;
-    let localStream = null;
-    let closed = false;
+    let pc=null, localStream=null, closed=false, dc=null, keepAliveTimer=null, reconnectTimer=null;
 
-    // ==========================
-    //  Audio unlock (speaker test)
-    // ==========================
-    els.test.addEventListener("click", async () => {
+    els.test.addEventListener("click", async ()=>{
       try{
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        gain.gain.value = 0.1;
-        osc.type = "sine";
-        osc.frequency.value = 880; // A5
-        osc.connect(gain).connect(ctx.destination);
-        osc.start();
-        setTimeout(()=>{ osc.stop(); ctx.close(); }, 240);
-        log("Played test beep.");
-      }catch(err){
-        log("Speaker test failed:", err.message || err);
-      }
+        const ctx = new (window.AudioContext||window.webkitAudioContext)();
+        const osc = ctx.createOscillator(); const g = ctx.createGain(); g.gain.value=0.1;
+        osc.type="sine"; osc.frequency.value=880; osc.connect(g).connect(ctx.destination);
+        osc.start(); setTimeout(()=>{osc.stop(); ctx.close();}, 200); log("Played test beep.");
+      }catch(e){ log("Speaker test failed:", e?.message || e); }
     });
 
-    // ==========================
-    //  Start / Hang Up
-    // ==========================
     els.start.addEventListener("click", startCall);
     els.hangup.addEventListener("click", hangup);
 
     async function startCall(){
-      if (pc) { log("Already running; ignoring Start."); return; }
-
-      closed = false;
-      setStatus("starting…", false);
-      els.start.disabled = true;
-      els.hangup.disabled = false;
+      if (pc){ log("Already running; ignoring Start."); return; }
+      closed=false; setStatus("starting…"); els.start.disabled=true; els.hangup.disabled=false;
 
       try{
-        // 1) Mic permission
         log("Requesting microphone…");
         localStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
+          audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }
         });
         log("Mic granted.");
 
-        // 2) Create RTCPeerConnection
         log("Creating RTCPeerConnection…");
-        pc = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-          bundlePolicy: "max-bundle"
-        });
+        pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}], bundlePolicy:"max-bundle" });
 
-        // 3) Remote audio track hookup
-        pc.ontrack = (e) => {
-          if (!els.remote.srcObject) {
+        // DataChannel keepalive so the connection doesn’t idle
+        dc = pc.createDataChannel("keepalive");
+        dc.onopen = () => {
+          log("DataChannel open. Starting keepalive.");
+          keepAliveTimer = setInterval(()=> { if (dc.readyState==="open") dc.send("ping"); }, 5000);
+        };
+        dc.onclose = () => { if (keepAliveTimer) clearInterval(keepAliveTimer); };
+
+        pc.ontrack = (e)=>{
+          if (!els.remote.srcObject){
             els.remote.srcObject = e.streams[0];
             log("Remote audio stream received.");
-            // Try play immediately (some browsers need this)
-            els.remote.play().then(
-              ()=> log("Remote audio playback started."),
-              (err)=> log("Remote audio play blocked:", err?.message || err)
-            );
+            els.remote.play().then(()=>log("Remote audio playback started."),
+              err=>log("Remote audio play blocked:", err?.message||err));
           }
         };
 
-        pc.onconnectionstatechange = () => {
-          log("pc state:", pc.connectionState);
-          if (["disconnected", "failed"].includes(pc.connectionState) && !closed) {
-            log("Connection dropped — attempting clean hangup.");
-            hangup();
+        pc.onconnectionstatechange = ()=>{
+          const st = pc.connectionState; log("pc state:", st);
+          if (st === "disconnected" && !closed){
+            log("Brief disconnect; trying ICE restart…");
+            // Small delay lets networks settle
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(async ()=>{
+              try{ await pc.restartIce?.(); log("restartIce invoked."); }catch{}
+            }, 1200);
+          }
+          if (st === "failed" && !closed){
+            log("Connection failed — you can press Start to reconnect.");
+            setStatus("error", true);
           }
         };
+        pc.oniceconnectionstatechange = ()=> log("ice:", pc.iceConnectionState);
 
-        pc.oniceconnectionstatechange = () => {
-          log("ice:", pc.iceConnectionState);
-        };
+        for (const t of localStream.getTracks()) pc.addTrack(t, localStream);
 
-        // 4) Add our mic
-        for (const track of localStream.getTracks()){
-          pc.addTrack(track, localStream);
-        }
-
-        // 5) Create offer and wait for ICE to finish (non-trickle)
-        const offer = await pc.createOffer({ offerToReceiveAudio: true });
+        const offer = await pc.createOffer({ offerToReceiveAudio:true });
         await pc.setLocalDescription(offer);
         log("Created local SDP offer; waiting for ICE to complete…");
         await waitForIceGatheringComplete(pc);
 
-        // 6) Get a token (client_secret + model) from our serverless function
         const voice = els.voice.value;
         const tokenRes = await fetch(`${TOKEN_ENDPOINT}?voice=${encodeURIComponent(voice)}`);
         log("Token response status:", tokenRes.status);
         if (!tokenRes.ok){
-          const txt = await tokenRes.text().catch(()=>"(no body)");
-          log("Token fetch failed body:", txt);
-          throw new Error("Token endpoint error");
+          const body = await tokenRes.text().catch(()=>"(no body)");
+          log("Token fetch failed body:", body); throw new Error("Token endpoint error");
         }
         const token = await tokenRes.json();
-        // token = { client_secret: { value }, model, voice, max_minutes, … }
         const secret = token?.client_secret?.value;
-        if (!secret){
-          log("Token JSON missing client_secret.value:", JSON.stringify(token));
-          throw new Error("Invalid token payload");
-        }
+        if (!secret){ log("Token JSON missing client_secret.value:", JSON.stringify(token)); throw new Error("Invalid token payload"); }
         log(`Session established on ${token.model}. Voice: ${token.voice}.`);
 
-        // 7) Post SDP to OpenAI Realtime & set remote answer
         const sdpUrl = SDP_ENDPOINT(token.model);
         log("POSTing SDP to:", sdpUrl);
         const answerRes = await fetch(sdpUrl, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${secret}`,
+          method:"POST",
+          headers:{
+            Authorization:`Bearer ${secret}`,
             "Content-Type": "application/sdp",
             "OpenAI-Beta": "realtime=v1"
           },
           body: pc.localDescription.sdp
         });
-
         log("SDP POST status:", answerRes.status);
         if (!answerRes.ok){
           const body = await answerRes.text().catch(()=>"(no body)");
-          log("SDP exchange failed body:", body);
-          throw new Error("SDP exchange failed");
+          log("SDP exchange failed body:", body); throw new Error("SDP exchange failed");
         }
         const answerSDP = await answerRes.text();
-        await pc.setRemoteDescription({ type: "answer", sdp: answerSDP });
-        log("Remote SDP answer set. You can speak anytime. (If you don’t hear Emma, click Test speaker, then Start again.)");
+        await pc.setRemoteDescription({ type:"answer", sdp: answerSDP });
+        log("Remote SDP answer set. Speak anytime.");
         setStatus("live (hands-free) ✨");
 
       }catch(err){
-        log("Error:", err?.message || err);
-        setStatus("error", true);
-        els.hangup.disabled = true;
-        els.start.disabled = false;
-        // Clean partial state
-        safeClose();
+        log("Error:", err?.message || err); setStatus("error", true);
+        els.hangup.disabled=true; els.start.disabled=false; safeClose();
       }
     }
 
     async function hangup(){
-      closed = true;
-      log("Call ended.");
-      setStatus("ended");
-      els.hangup.disabled = true;
-      els.start.disabled = false;
-      safeClose();
+      closed=true; log("Call ended."); setStatus("ended");
+      els.hangup.disabled=true; els.start.disabled=false; safeClose();
     }
 
     function safeClose(){
-      try { if (pc) pc.close(); } catch {}
-      pc = null;
-      if (localStream){
-        for (const t of localStream.getTracks()) try{ t.stop(); }catch{}
-      }
-      localStream = null;
-      els.remote.srcObject = null;
+      try{ if (keepAliveTimer) clearInterval(keepAliveTimer); }catch{}
+      try{ if (dc) dc.close(); }catch{} dc=null;
+      try{ if (pc) pc.close(); }catch{} pc=null;
+      if (localStream){ for (const t of localStream.getTracks()) try{t.stop();}catch{} }
+      localStream=null; els.remote.srcObject=null;
     }
 
-    // Wait for ICE to gather all candidates (so we can non-trickle POST once)
     function waitForIceGatheringComplete(pc){
-      if (pc.iceGatheringState === "complete") return Promise.resolve();
+      if (pc.iceGatheringState==="complete") return Promise.resolve();
       return new Promise(resolve=>{
-        function check(){
-          if (pc.iceGatheringState === "complete"){
-            pc.removeEventListener("icegatheringstatechange", check);
-            resolve();
-          }
-        }
-        pc.addEventListener("icegatheringstatechange", check);
-        // Safety timeout: proceed after 3.5s even if still "gathering"
-        setTimeout(()=>{
-          pc.removeEventListener("icegatheringstatechange", check);
-          resolve();
-        }, 3500);
+        const check=()=>{ if (pc.iceGatheringState==="complete"){ pc.removeEventListener("icegatheringstatechange",check); resolve(); } };
+        pc.addEventListener("icegatheringstatechange",check);
+        setTimeout(()=>{ pc.removeEventListener("icegatheringstatechange",check); resolve(); }, 3500);
       });
     }
   </script>
