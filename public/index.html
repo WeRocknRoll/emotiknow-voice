@@ -1,152 +1,209 @@
-<audio id="remoteAudio" autoplay playsinline></audio>
-
-<script>
-  const logEl = document.getElementById("log");
-  const statusEl = document.getElementById("status");
-  const startBtn = document.getElementById("start");
-  const hangupBtn = document.getElementById("hangup");
-  const remoteAudio = document.getElementById("remoteAudio");
-
-  let pc = null, localStream = null, audioCtx = null, noSpeechTimer = null;
-
-  function log(msg){
-    const p = document.createElement("div");
-    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    logEl.appendChild(p);
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-  function setStatus(s){ statusEl.textContent = s; }
-
-  // Helper: (re)start the "no speech" timer
-  function armNoSpeechTimer(ms = 20000){           // 20s (was 8s)
-    clearNoSpeechTimer();
-    noSpeechTimer = setTimeout(() => {
-      log(`No user speech for ${ms/1000}s — ending to save cost`);
-      hangup();
-    }, ms);
-  }
-  function clearNoSpeechTimer(){
-    if (noSpeechTimer) clearTimeout(noSpeechTimer);
-    noSpeechTimer = null;
-  }
-
-  async function start(){
-    try {
-      // 1) Create/Resume AudioContext so the browser is allowed to play audio
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === "suspended") await audioCtx.resume();
-
-      // 2) Ask for microphone
-      setStatus("requesting mic…");
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
-      setStatus("mic granted");
-
-      // Arm no-speech timeout as soon as we have a mic
-      armNoSpeechTimer();
-
-      // 3) Fetch a realtime token from our server
-      const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(document.getElementById('voice').value || 'shimmer')}`);
-      const token = await tokenRes.json();
-      if (!token?.client_secret?.value) {
-        log("Failed to get token");
-        return;
-      }
-
-      // 4) Create PeerConnection
-      pc = new RTCPeerConnection();
-
-      // 5) Attach REMOTE audio
-      pc.ontrack = (e) => {
-        log(`ontrack received (kind=${e.track.kind})`);
-        remoteAudio.srcObject = e.streams[0];
-        remoteAudio.muted = false;
-        remoteAudio.volume = 1.0;
-        const p = remoteAudio.play();
-        if (p && typeof p.then === "function") {
-          p.catch(err => log("audio play blocked: " + err.message));
-        }
-      };
-
-      // Optional: see ICE progress
-      pc.oniceconnectionstatechange = () => log("ice: " + pc.iceConnectionState);
-      pc.onconnectionstatechange    = () => log("pc state: " + pc.connectionState);
-
-      // 6) Add LOCAL mic tracks to PC
-      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
-      // 7) Create offer & set local description
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // 8) Send SDP to OpenAI Realtime, get answer
-      const baseUrl = "https://api.openai.com/v1/realtime";
-      const model   = "gpt-4o-mini-realtime-preview";
-      const sdpRes = await fetch(`${baseUrl}?model=${model}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/sdp",
-          "Authorization": `Bearer ${token.client_secret.value}`,
-          "OpenAI-Beta": "realtime=v1"
-        },
-        body: offer.sdp
-      });
-
-      const answer = { type: "answer", sdp: await sdpRes.text() };
-      await pc.setRemoteDescription(answer);
-
-      log(`Session established on ${model}. Voice: ${document.getElementById('voice').value}`);
-
-      // 9) Anytime we detect mic data flowing, keep the line alive
-      localStream.getAudioTracks().forEach(track => {
-        track.onended    = () => log("mic track ended");
-        track.onmute     = () => log("mic muted");
-        track.onunmute   = () => log("mic unmuted");
-        track.onisolationchange = () => log("mic isolation change");
-      });
-
-      // 10) Reset no-speech timer when we detect user start speaking (via volume meter)
-      // Lightweight meter
-      const meterSrc = audioCtx.createMediaStreamSource(localStream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      meterSrc.connect(analyser);
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      (function pump(){
-        analyser.getByteTimeDomainData(data);
-        // crude voice activity check
-        let maxDev = 0;
-        for (let i=0;i<data.length;i++){
-          const dev = Math.abs(data[i]-128);
-          if (dev > maxDev) maxDev = dev;
-        }
-        if (maxDev > 8) armNoSpeechTimer(); // user made a sound -> extend timer
-        if (pc && pc.connectionState !== "closed") requestAnimationFrame(pump);
-      })();
-
-    } catch (err) {
-      log("Error: " + (err?.message || err));
-      hangup();
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EmotiKnow — Emma (Voice Companion)</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --accent:#8b5cf6; }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
+      color:var(--ink); background:linear-gradient(180deg,#0b1022,#0f172a 40%);
+      min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:32px;
     }
-  }
+    .card{
+      width:min(980px,100%); background:rgba(17,24,39,.65); border:1px solid rgba(148,163,184,.15);
+      border-radius:20px; backdrop-filter: blur(10px); padding:28px 28px 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    h1{margin:0 0 12px; font-weight:800; letter-spacing:.3px; font-size: clamp(24px, 3vw, 36px);}
+    p.lead{margin:0 0 18px; color:var(--muted);}
+    .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin: 6px 0 18px;}
+    label{font-size:14px; color:var(--muted); margin-right:6px;}
+    select, .btn{
+      appearance:none; border:1px solid rgba(148,163,184,.2); background:#0b1022; color:var(--ink);
+      padding:10px 12px; border-radius:10px; font-weight:600;
+    }
+    .btn{ cursor:pointer; background:var(--accent); border:none; color:white; padding:12px 18px; }
+    .btn.alt{ background:#ef6c00; }
+    .btn.ghost{ background:#0b1022; border:1px solid rgba(148,163,184,.25); }
+    .status{ margin-left:auto; font-weight:700; color:#a7f3d0; }
+    .status.err{ color:#fecaca; }
+    #log{
+      margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:12px; background:#0b1022;
+      height:320px; overflow:auto; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:13px; line-height:1.45;
+    }
+    .muted{ color:var(--muted); }
+    footer{ margin-top:10px; color:var(--muted); font-size:12px; text-align:right;}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>EmotiKnow — Emma (Voice Companion)</h1>
+    <p class="lead">Click <b>Start</b> once to allow your microphone. Talk naturally; Emma will reply in real time.</p>
 
-  function hangup(){
-    try {
-      if (pc) {
-        pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch{} });
-        pc.close();
+    <div class="row">
+      <button id="start" class="btn">Start</button>
+      <button id="hangup" class="btn alt">Hang Up</button>
+
+      <label for="voice">Voice:</label>
+      <select id="voice">
+        <!-- Only voices supported by the API -->
+        <option value="shimmer" selected>Shimmer (female, bright)</option>
+        <option value="coral">Coral (female, clear)</option>
+        <option value="sage">Sage (female, soft)</option>
+        <option value="marin">Marin (female, warm)</option>
+        <option value="ballad">Ballad (feminine, lyrical)</option>
+        <option value="verse">Verse (neutral)</option>
+        <option value="alloy">Alloy (neutral)</option>
+        <option value="echo">Echo</option>
+        <option value="ash">Ash</option>
+        <option value="cedar">Cedar</option>
+      </select>
+
+      <button id="testTone" class="btn ghost" title="Play a short beep to test your speakers">Test speaker</button>
+
+      <span id="status" class="status">idle</span>
+    </div>
+
+    <div id="log"></div>
+    <footer><span class="muted">Tip:</span> If you don’t hear Emma, press <b>Test speaker</b> and click <b>Start</b> again (browsers sometimes block autoplay).</footer>
+  </main>
+
+  <!-- Remote audio from Emma -->
+  <audio id="remoteAudio" autoplay playsinline></audio>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("start");
+    const hangupBtn = document.getElementById("hangup");
+    const voiceSel = document.getElementById("voice");
+    const testToneBtn = document.getElementById("testTone");
+    const remoteAudio = document.getElementById("remoteAudio");
+
+    let pc = null, localStream = null;
+
+    function log(msg, isErr=false){
+      const line = document.createElement("div");
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      if(isErr) line.style.color = "#fecaca";
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function setStatus(text, err=false){
+      statusEl.textContent = text;
+      statusEl.classList.toggle("err", !!err);
+    }
+
+    function playTestTone() {
+      try{
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = 880; // A5 beep
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+        o.start();
+        setTimeout(()=>{
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.02);
+          o.stop(ctx.currentTime + 0.03);
+          ctx.close();
+        }, 250);
+      }catch(e){}
+    }
+
+    async function start(){
+      try{
+        setStatus("requesting mic…");
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setStatus("mic granted");
+
+        // Ask our server for a session + client secret, clamp voice to supported list server-side
+        const v = encodeURIComponent(voiceSel.value || "shimmer");
+        const tokRes = await fetch(`/api/realtime-session?voice=${v}`);
+        if(!tokRes.ok){ log(`Token error ${tokRes.status}`, true); setStatus("token error", true); return; }
+        const token = await tokRes.json();
+        if(!token?.client_secret?.value){ log("Missing client_secret in token", true); setStatus("token error", true); return; }
+
+        // Create RTCPeerConnection
+        pc = new RTCPeerConnection();
+
+        // When Emma sends back audio, play it
+        pc.ontrack = (e)=>{
+          log("Remote audio stream received");
+          remoteAudio.srcObject = e.streams[0];
+          remoteAudio.play().catch(err => log("Autoplay blocked by browser: " + err, true));
+        };
+
+        // Helpful connection logging + auto-reconnect
+        pc.oniceconnectionstatechange = ()=>{
+          log("pc state: " + pc.connectionState);
+          if(["disconnected","failed"].includes(pc.connectionState)){
+            log("Connection dropped — restarting…");
+            hangup(false);
+            start();
+          }
+        };
+
+        // Send our mic to the model
+        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+        // Create SDP offer, send to OpenAI, set remote answer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const baseUrl = "https://api.openai.com/v1/realtime";
+        const model = token.model || "gpt-4o-mini-realtime-preview";
+        const sdpResp = await fetch(`${baseUrl}?model=${encodeURIComponent(model)}`, {
+          method: "POST",
+          body: offer.sdp,
+          headers: {
+            Authorization: `Bearer ${token.client_secret.value}`,
+            "Content-Type": "application/sdp"
+          }
+        });
+
+        if(!sdpResp.ok){
+          const txt = await sdpResp.text();
+          log("SDP exchange failed: " + txt, true);
+          setStatus("sdp error", true);
+          return;
+        }
+
+        const answer = { type: "answer", sdp: await sdpResp.text() };
+        await pc.setRemoteDescription(answer);
+
+        log(`✅ Session established on ${model}. Voice: ${token.voice || voiceSel.value}`);
+        setStatus("live (hands-free) ✨");
+      }catch(err){
+        log("Error: " + (err?.message || err), true);
+        setStatus("error", true);
       }
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
-    } catch {}
-    pc = null;
-    localStream = null;
-    clearNoSpeechTimer();
-    log("Call ended.");
-    setStatus("ended");
-  }
+    }
 
-  document.getElementById("voice").addEventListener("change", () => log("voice: " + document.getElementById("voice").value));
-  startBtn.onclick = start;
-  hangupBtn.onclick = hangup;
-</script>
+    function hangup(showEnded = true){
+      try{
+        if(pc){ pc.close(); pc = null; }
+        if(localStream){ localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+      }catch(e){}
+      if(showEnded){ setStatus("ended"); log("Call ended."); }
+    }
+
+    // UI events
+    startBtn.addEventListener("click", async ()=>{
+      // A quick user gesture audio to help browsers allow remote autoplay
+      await remoteAudio.play().catch(()=>{});
+      await start();
+    });
+    hangupBtn.addEventListener("click", ()=> hangup(true));
+    testToneBtn.addEventListener("click", playTestTone);
+
+    // Clean up on nav away
+    window.addEventListener("beforeunload", ()=> hangup(false));
+  </script>
+</body>
+</html>
