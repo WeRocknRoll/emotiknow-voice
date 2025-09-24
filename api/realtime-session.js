@@ -1,6 +1,5 @@
 // api/realtime-session.js
 export default async function handler(req, res) {
-  // CORS for local testing; tighten when you go live (set your domain).
   const allowOrigin = process.env.CORS_ORIGIN || "*";
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -16,6 +15,52 @@ export default async function handler(req, res) {
     if (!OPENAI_API_KEY) {
       return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
     }
+
+    const url = new URL(req.url, `https://${req.headers.host}`);
+    const requestedVoice = url.searchParams.get("voice") || "shimmer";
+    const SUPPORTED_VOICES = [
+      "alloy","ash","ballad","coral","echo","sage","shimmer","verse","marin","cedar"
+    ];
+    const voice = SUPPORTED_VOICES.includes(requestedVoice) ? requestedVoice : "shimmer";
+
+    const model = "gpt-4o-mini-realtime-preview";
+
+    const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "realtime=v1"
+      },
+      body: JSON.stringify({
+        model,
+        turn_detection: {
+          type: "server_vad",
+          threshold: 0.5,
+          prefix_padding_ms: 400,
+          silence_duration_ms: 2800
+        },
+        voice,
+        max_response_output_tokens: 350,
+        instructions:
+`You are Emma, EmotiKnow’s warm, helpful voice companion.
+Engage naturally, ask clarifying follow-ups, and keep the conversation flowing.
+Be concise unless asked for detail. If the user is silent, gently prompt them.
+Avoid long monologues; be conversational.`
+      })
+    });
+
+    if (!r.ok) {
+      const text = await r.text().catch(() => "(no body)");
+      return res.status(500).json({ error: "Failed to create session", body: text });
+    }
+    const data = await r.json();
+    return res.status(200).json(data);
+
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+}
 
     // Allow ?voice=... but clamp to supported names
     const url = new URL(req.url, `https://${req.headers.host}`);
