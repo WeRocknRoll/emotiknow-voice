@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EmotiKnow – Emma (Cheaper + Stable)</title>
+  <title>EmotiKnow – Emma (Voice Companion)</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 16px}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:840px;margin:40px auto;padding:0 16px}
     .btn{padding:12px 18px;border-radius:10px;border:0;background:#6d28d9;color:#fff;font-weight:600;cursor:pointer}
     #status{margin-left:10px;color:#4b5563}
-    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:220px;overflow:auto;border:1px solid #e5e7eb;font-size:14px;line-height:1.4}
+    #log{margin-top:18px;background:#f8fafc;border-radius:12px;padding:12px;height:240px;overflow:auto;border:1px solid #e5e7eb;font-size:14px;line-height:1.4}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
     .select{padding:10px;border-radius:10px;border:1px solid #e5e7eb}
     label{display:flex;align-items:center;gap:6px}
@@ -16,7 +16,7 @@
 </head>
 <body>
   <h1>EmotiKnow – Emma (Voice Companion)</h1>
-  <p>Click <b>Start</b> once to allow mic. Emma runs on a cheaper realtime model, auto-pauses on silence, and reconnects if needed.</p>
+  <p>Click <b>Start</b> and talk naturally. Emma uses a cheaper model when possible and falls back automatically if needed.</p>
 
   <div class="row">
     <button id="start" class="btn">Start</button>
@@ -52,21 +52,16 @@
   <div id="log"></div>
 
   <script>
-    // ----- Cheap model by default (≈5x cheaper) -----
-    const MODEL = "gpt-4o-mini-realtime-preview";
+    // -------- Models & Policies --------
+    const MINI_MODEL = "gpt-4o-mini-realtime-preview";
+    const FULL_MODEL = "gpt-4o-realtime-preview"; // fallback
+    const SILENCE_CUTOFF_MS = 8000;   // end session on 8s of user silence (saves $)
+    const WATCHDOG_QUIET_MS = 20000;  // try ICE restart if quiet 20s
 
-    // ----- Silence cutoff + watchdog settings -----
-    const SILENCE_CUTOFF_MS = 8000;   // if no user speech for 8s → hangup (saves $$)
-    const WATCHDOG_QUIET_MS = 20000;  // if connected but quiet for 20s → try ICE restart
-
-    let restarting = false;
-    let disconnectTimer = null;
-    let icedOnce = false;
-    let lastUserMicActivity = Date.now();
+    // -------- State --------
+    let restarting = false, disconnectTimer = null, icedOnce = false;
     let lastAnyActivity = Date.now();
-    let keepAliveInterval = null;
-    let silenceTimer = null;
-    let sessionEndTimer = null;
+    let keepAliveInterval = null, silenceTimer = null, sessionEndTimer = null;
 
     const logEl = document.getElementById("log");
     const statusEl = document.getElementById("status");
@@ -80,33 +75,19 @@
 
     function log(msg){ const p=document.createElement("div"); p.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight; }
     function setStatus(s){ statusEl.textContent = s; }
+    function setMicEnabled(enabled){ if (!localStream) return; localStream.getAudioTracks().forEach(t => t.enabled = enabled); }
 
-    function setMicEnabled(enabled){
-      if (!localStream) return;
-      localStream.getAudioTracks().forEach(t => t.enabled = enabled);
-    }
-
-    function startSilenceTimer() {
-      clearSilenceTimer();
-      silenceTimer = setTimeout(() => {
-        log(`No user speech for ${SILENCE_CUTOFF_MS/1000}s — ending to save cost`);
-        hangup();
-      }, SILENCE_CUTOFF_MS);
-    }
+    function startSilenceTimer() { clearSilenceTimer(); silenceTimer = setTimeout(() => { log(`No user speech for ${SILENCE_CUTOFF_MS/1000}s — ending to save cost`); hangup(); }, SILENCE_CUTOFF_MS); }
     function clearSilenceTimer() { if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer=null; } }
-
-    function startSessionEndTimer(minutes) {
-      clearSessionEndTimer();
-      sessionEndTimer = setTimeout(() => {
-        log(`Session limit ${minutes} min reached — ending`);
-        hangup();
-      }, minutes * 60 * 1000);
-    }
+    function startSessionEndTimer(minutes){ clearSessionEndTimer(); sessionEndTimer = setTimeout(()=>{ log(`Session limit ${minutes} min reached — ending`); hangup(); }, minutes*60*1000); }
     function clearSessionEndTimer(){ if (sessionEndTimer){ clearTimeout(sessionEndTimer); sessionEndTimer=null; } }
 
+    startBtn.onclick = start;
+    hangupBtn.onclick = hangup;
+    hangupBtn.disabled = true;
+
     async function start() {
-      startBtn.disabled = true;
-      hangupBtn.disabled = false;
+      startBtn.disabled = true; hangupBtn.disabled = false;
 
       try {
         setStatus("requesting mic…");
@@ -115,61 +96,91 @@
         });
         setStatus("mic granted");
 
-        // Mic level monitor for user-speech detection (cheap silence cutoff)
+        // AudioContext must be resumed on user gesture (autoplay policy)
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        micSource = audioCtx.createMediaStreamSource(localStream);
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
-        micSource.connect(analyser);
+        await audioCtx.resume();
 
+        // Simple mic analyser to detect speech (for silence cutoff)
+        const src = audioCtx.createMediaStreamSource(localStream);
+        analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser);
         const buf = new Uint8Array(analyser.frequencyBinCount);
-        const readLevel = () => {
+        const tick = () => {
           analyser.getByteTimeDomainData(buf);
-          // compute simple amplitude
-          let sum = 0;
-          for (let i=0;i<buf.length;i++){ const v = (buf[i]-128)/128; sum += v*v; }
-          const rms = Math.sqrt(sum/buf.length);
-          // if above very small threshold, consider it user speech/noise
-          if (rms > 0.02) { lastUserMicActivity = Date.now(); lastAnyActivity = Date.now(); startSilenceTimer(); }
-          rafId = requestAnimationFrame(readLevel);
+          let sum=0; for (let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+          const rms=Math.sqrt(sum/buf.length);
+          if (rms>0.02){ lastAnyActivity=Date.now(); startSilenceTimer(); }
+          rafId=requestAnimationFrame(tick);
         };
-        rafId = requestAnimationFrame(readLevel);
+        rafId=requestAnimationFrame(tick);
 
-        // Fetch ephemeral token using the selected voice + cheaper model
+        // Try mini first, then auto-fallback to full model
         const v = voiceSel.value || "shimmer";
-        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}&model=${encodeURIComponent(MODEL)}`);
-        if (!tokenRes.ok) {
-          const t = await tokenRes.text();
-          throw new Error(`Token error (${tokenRes.status}): ${t}`);
+        const okMini = await establishSessionWithModel(v, MINI_MODEL);
+        if (!okMini) {
+          log("Mini model failed — trying full model…");
+          const okFull = await establishSessionWithModel(v, FULL_MODEL);
+          if (!okFull) throw new Error("Both models failed to establish a session");
         }
-        const token = await tokenRes.json();
-        if (!token?.client_secret?.value) throw new Error("No client_secret in token response");
 
+        setStatus("live (hands-free) ✨");
+        startSilenceTimer();
+        const maxMins = parseInt(maxminsSel.value || "20", 10);
+        startSessionEndTimer(maxMins);
+
+        // Keep-alive: poke stats every 10s; if quiet for 20s, nudge ICE
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
+        keepAliveInterval = setInterval(async () => {
+          try { await pc?.getStats?.(); } catch {}
+          if (pc && pc.connectionState === "connected" && Date.now()-lastAnyActivity > WATCHDOG_QUIET_MS) {
+            log("Watchdog: quiet for 20s — attempting ICE restart");
+            try { pc.restartIce?.(); } catch {}
+            lastAnyActivity = Date.now();
+          }
+        }, 10000);
+
+      } catch (err) {
+        log("Error: " + err);
+        setStatus("error");
+        startBtn.disabled = false; hangupBtn.disabled = true;
+      }
+    }
+
+    async function establishSessionWithModel(voice, modelName) {
+      try {
+        // Get ephemeral token (server returns JSON or a clear error JSON)
+        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}&model=${encodeURIComponent(modelName)}`);
+        if (!tokenRes.ok) { log(`Token error (${modelName}) [${tokenRes.status}]: ${await tokenRes.text()}`); return false; }
+        const token = await tokenRes.json();
+        if (!token?.client_secret?.value) { log(`No client_secret for ${modelName}`); return false; }
+
+        // Peer connection
         pc = new RTCPeerConnection();
 
-        pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; lastAnyActivity = Date.now(); };
+        // Audio: on incoming track, attach and force play (fix autoplay)
+        pc.ontrack = (e) => {
+          remoteAudio.srcObject = e.streams[0];
+          remoteAudio.muted = false;
+          remoteAudio.play().catch(err => log("Audio play blocked: " + err));
+          lastAnyActivity = Date.now();
+        };
+
         pc.oniceconnectionstatechange = () => { log("ice: " + pc.iceConnectionState); lastAnyActivity = Date.now(); };
 
-        // Reconnect logic: ICE restart first, then full restart if needed
+        // Robust connection state handling (ICE restart → full restart)
         pc.onconnectionstatechange = () => {
           log("pc state: " + pc.connectionState);
 
           if (pc.connectionState === "failed" && !restarting) {
-            restarting = true;
-            log("Connection failed — restarting…");
+            restarting = true; log("Connection failed — restarting…");
             setTimeout(() => { hangup(); start(); restarting = false; }, 600);
           }
 
           if (pc.connectionState === "disconnected") {
-            if (!icedOnce) {
-              icedOnce = true;
-              try { log("Disconnected — attempting ICE restart"); pc.restartIce?.(); } catch {}
-            }
+            if (!icedOnce) { icedOnce = true; try { log("Disconnected — attempting ICE restart"); pc.restartIce?.(); } catch {} }
             if (!disconnectTimer) {
               disconnectTimer = setTimeout(() => {
                 if (pc && pc.connectionState === "disconnected" && !restarting) {
-                  restarting = true;
-                  log("Still disconnected — restarting…");
+                  restarting = true; log("Still disconnected — restarting…");
                   hangup(); start(); restarting = false;
                 }
                 disconnectTimer = null;
@@ -181,31 +192,25 @@
           }
         };
 
-        // Half-duplex gating to avoid Emma interrupting herself via mic echo:
+        // Echo guard (half-duplex): mute mic while Emma speaks
         remoteAudio.addEventListener("playing", () => { setMicEnabled(false); });
         let resumeTimer = null;
         const resumeMic = () => { setMicEnabled(true); startSilenceTimer(); };
-        remoteAudio.addEventListener("pause", () => {
-          if (resumeTimer) clearTimeout(resumeTimer);
-          resumeTimer = setTimeout(resumeMic, 400);
-        });
+        remoteAudio.addEventListener("pause", () => { if (resumeTimer) clearTimeout(resumeTimer); resumeTimer = setTimeout(resumeMic, 400); });
         remoteAudio.addEventListener("timeupdate", () => {
           if (remoteAudio.paused) return;
           const almostDone = remoteAudio.duration && (remoteAudio.duration - remoteAudio.currentTime < 0.35);
-          if (almostDone) {
-            if (resumeTimer) clearTimeout(resumeTimer);
-            resumeTimer = setTimeout(resumeMic, 300);
-          }
+          if (almostDone) { if (resumeTimer) clearTimeout(resumeTimer); resumeTimer = setTimeout(resumeMic, 300); }
         });
 
         // Send mic upstream
         localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
-        // SDP offer/answer with cheaper model
+        // Offer/Answer with chosen model
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(MODEL)}`, {
+        const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(modelName)}`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token.client_secret.value}`,
@@ -215,33 +220,24 @@
           body: offer.sdp
         });
 
-        const answerSDP = await sdpRes.text();
-        await pc.setRemoteDescription({ type: "answer", sdp: answerSDP });
+        const answerText = await sdpRes.text();
+        if (!sdpRes.ok) {
+          log(`SDP error (${modelName}) [${sdpRes.status}]: ${answerText}`);
+          try { pc.close(); } catch {}
+          pc = null;
+          return false;
+        }
 
-        setStatus("live (hands-free) ✨");
-        log(`Session established on ${MODEL}. Voice: ${v}.`);
-
-        // Start silence cutoff + session limit timers
-        startSilenceTimer();
-        const maxMins = parseInt(maxminsSel.value || "20", 10);
-        startSessionEndTimer(maxMins);
-
-        // Keep-alive: poke stats every 10s + nudge if quiet 20s
-        if (keepAliveInterval) clearInterval(keepAliveInterval);
-        keepAliveInterval = setInterval(async () => {
-          try { await pc?.getStats?.(); } catch {}
-          if (pc && pc.connectionState === "connected" && Date.now() - lastAnyActivity > WATCHDOG_QUIET_MS) {
-            log("Watchdog: quiet for 20s — attempting ICE restart");
-            try { pc.restartIce?.(); } catch {}
-            lastAnyActivity = Date.now();
-          }
-        }, 10000);
-
-      } catch (err) {
-        log("Error: " + err);
-        setStatus("error");
-        startBtn.disabled = false;
-        hangupBtn.disabled = true;
+        await pc.setRemoteDescription({ type: "answer", sdp: answerText });
+        log(`Session established on ${modelName}. Voice: ${voice}.`);
+        // Force play once more (some browsers need it after SRD)
+        remoteAudio.play().catch(err => log("Audio play (post-answer) blocked: " + err));
+        return true;
+      } catch (e) {
+        log(`establishSessionWithModel(${modelName}) failed: ` + e);
+        try { pc?.close(); } catch {}
+        pc = null;
+        return false;
       }
     }
 
@@ -252,20 +248,14 @@
         if (rafId) cancelAnimationFrame(rafId);
         if (audioCtx) audioCtx.close();
         if (keepAliveInterval) clearInterval(keepAliveInterval);
-        clearSilenceTimer();
-        clearSessionEndTimer();
+        clearSilenceTimer(); clearSessionEndTimer();
       } finally {
         pc = null; localStream = null; audioCtx = null; analyser = null; micSource = null; rafId = null;
         restarting = false; icedOnce = false;
         setStatus("ended"); log("Call ended.");
-        startBtn.disabled = false;
-        hangupBtn.disabled = true;
+        startBtn.disabled = false; hangupBtn.disabled = true;
       }
     }
-
-    startBtn.onclick = start;
-    hangupBtn.onclick = hangup;
-    hangupBtn.disabled = true;
   </script>
 </body>
 </html>
