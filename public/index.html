@@ -2,208 +2,316 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
   <title>EmotiKnow — Emma (Voice Companion)</title>
   <style>
-    :root { --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --accent:#8b5cf6; }
-    *{ box-sizing:border-box; }
+    :root{
+      --bg:#0c1116; --panel:#121821; --ink:#e6edf3; --muted:#9da7b3;
+      --accent:#8b5cf6; --accent-2:#f59e0b; --border:#223044;
+      --ok:#34d399; --bad:#ef4444;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
     body{
-      margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
-      color:var(--ink); background:linear-gradient(180deg,#0b1022,#0f172a 40%);
-      min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:32px;
+      margin:0; background:linear-gradient(180deg,#0c1116,#0b1420 40%,#0a1726);
+      color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased
+    }
+    .wrap{
+      max-width:1100px; margin:32px auto; padding:16px;
     }
     .card{
-      width:min(980px,100%); background:rgba(17,24,39,.65); border:1px solid rgba(148,163,184,.15);
-      border-radius:20px; backdrop-filter: blur(10px); padding:28px 28px 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:16px; padding:24px 24px 18px;
+      box-shadow:0 6px 20px rgba(0,0,0,.25)
     }
-    h1{margin:0 0 12px; font-weight:800; letter-spacing:.3px; font-size: clamp(24px, 3vw, 36px);}
-    p.lead{margin:0 0 18px; color:var(--muted);}
-    .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin: 6px 0 18px;}
-    label{font-size:14px; color:var(--muted); margin-right:6px;}
-    select, .btn{
-      appearance:none; border:1px solid rgba(148,163,184,.2); background:#0b1022; color:var(--ink);
-      padding:10px 12px; border-radius:10px; font-weight:600;
+    h1{margin:0 0 10px; font-size:34px; line-height:1.15}
+    .note{color:var(--muted); margin:0 0 18px}
+    .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px}
+    select, button{
+      height:44px; border-radius:10px; border:1px solid var(--border);
+      background:#0f1622; color:var(--ink); padding:0 14px; font-size:15px
     }
-    .btn{ cursor:pointer; background:var(--accent); border:none; color:white; padding:12px 18px; }
-    .btn.alt{ background:#ef6c00; }
-    .btn.ghost{ background:#0b1022; border:1px solid rgba(148,163,184,.25); }
-    .status{ margin-left:auto; font-weight:700; color:#a7f3d0; }
-    .status.err{ color:#fecaca; }
-    #log{
-      margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:12px; background:#0b1022;
-      height:320px; overflow:auto; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size:13px; line-height:1.45;
+    button{
+      background:var(--accent); border:none; font-weight:650; cursor:pointer
     }
-    .muted{ color:var(--muted); }
-    footer{ margin-top:10px; color:var(--muted); font-size:12px; text-align:right;}
+    button.warn{ background:var(--accent-2); color:#1b1305 }
+    button:disabled{opacity:.6; cursor:not-allowed}
+    .status{margin-left:auto; color:#9ae6b4; font-weight:600}
+    .status.bad{color:#fecaca}
+    .log{
+      margin-top:10px;
+      background:#0b1320; border:1px solid var(--border); border-radius:12px;
+      min-height:320px; padding:14px; font-family:var(--mono); font-size:13px;
+      white-space:pre-wrap; overflow:auto
+    }
+    .tip{color:var(--muted); font-size:13px; text-align:center; margin-top:10px}
+    .sr-only{position:absolute; left:-9999px}
   </style>
 </head>
 <body>
-  <main class="card">
-    <h1>EmotiKnow — Emma (Voice Companion)</h1>
-    <p class="lead">Click <b>Start</b> once to allow your microphone. Talk naturally; Emma will reply in real time.</p>
+  <div class="wrap">
+    <div class="card">
+      <h1>EmotiKnow — Emma (Voice Companion)</h1>
+      <p class="note">
+        Click <b>Start</b> once to allow your microphone. Talk naturally; Emma replies in real time.
+      </p>
 
-    <div class="row">
-      <button id="start" class="btn">Start</button>
-      <button id="hangup" class="btn alt">Hang Up</button>
+      <div class="row">
+        <button id="start" title="Start the conversation">Start</button>
+        <button id="hangup" class="warn" disabled>Hang Up</button>
 
-      <label for="voice">Voice:</label>
-      <select id="voice">
-        <!-- Only voices supported by the API -->
-        <option value="shimmer" selected>Shimmer (female, bright)</option>
-        <option value="coral">Coral (female, clear)</option>
-        <option value="sage">Sage (female, soft)</option>
-        <option value="marin">Marin (female, warm)</option>
-        <option value="ballad">Ballad (feminine, lyrical)</option>
-        <option value="verse">Verse (neutral)</option>
-        <option value="alloy">Alloy (neutral)</option>
-        <option value="echo">Echo</option>
-        <option value="ash">Ash</option>
-        <option value="cedar">Cedar</option>
-      </select>
+        <label for="voice" class="sr-only">Voice</label>
+        <select id="voice" title="Choose Emma's voice">
+          <option value="shimmer" selected>Shimmer (female, bright)</option>
+          <option value="coral">Coral (female, clear)</option>
+          <option value="sage">Sage (female, soft)</option>
+          <option value="marin">Marin (female, warm)</option>
+          <option value="ballad">Ballad (feminine, lyrical)</option>
+          <option value="verse">Verse (neutral)</option>
+          <option value="alloy">Alloy (neutral)</option>
+          <option value="echo">Echo</option>
+          <option value="ash">Ash</option>
+          <option value="cedar">Cedar</option>
+        </select>
 
-      <button id="testTone" class="btn ghost" title="Play a short beep to test your speakers">Test speaker</button>
+        <button id="test" title="Play a short beep to confirm speakers work">Test speaker</button>
 
-      <span id="status" class="status">idle</span>
+        <span id="status" class="status">ended</span>
+      </div>
+
+      <div id="log" class="log" aria-live="polite"></div>
+      <p class="tip">
+        Tip: If you don’t hear Emma, click <b>Test speaker</b> once and then click <b>Start</b> again
+        (browsers sometimes block autoplay).
+      </p>
     </div>
+  </div>
 
-    <div id="log"></div>
-    <footer><span class="muted">Tip:</span> If you don’t hear Emma, press <b>Test speaker</b> and click <b>Start</b> again (browsers sometimes block autoplay).</footer>
-  </main>
-
-  <!-- Remote audio from Emma -->
-  <audio id="remoteAudio" autoplay playsinline></audio>
+  <!-- Hidden audio element for remote track -->
+  <audio id="remote" class="sr-only" autoplay playsinline></audio>
 
   <script>
-    const logEl = document.getElementById("log");
-    const statusEl = document.getElementById("status");
-    const startBtn = document.getElementById("start");
-    const hangupBtn = document.getElementById("hangup");
-    const voiceSel = document.getElementById("voice");
-    const testToneBtn = document.getElementById("testTone");
-    const remoteAudio = document.getElementById("remoteAudio");
+    // ==========================
+    //  Configuration
+    // ==========================
+    const TOKEN_ENDPOINT = "/api/realtime-session"; // your serverless function path
+    const SDP_ENDPOINT   = (model) => `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
 
-    let pc = null, localStream = null;
+    // ==========================
+    //  Elements & small helpers
+    // ==========================
+    const els = {
+      start:  document.getElementById("start"),
+      hangup: document.getElementById("hangup"),
+      voice:  document.getElementById("voice"),
+      test:   document.getElementById("test"),
+      status: document.getElementById("status"),
+      log:    document.getElementById("log"),
+      remote: document.getElementById("remote"),
+    };
 
-    function log(msg, isErr=false){
-      const line = document.createElement("div");
-      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      if(isErr) line.style.color = "#fecaca";
-      logEl.appendChild(line);
-      logEl.scrollTop = logEl.scrollHeight;
+    function log(...args){
+      const time = new Date().toLocaleTimeString();
+      const msg = `[${time}] ${args.join(" ")}`;
+      els.log.appendChild(document.createTextNode(msg + "\n"));
+      els.log.scrollTop = els.log.scrollHeight;
+      console.log(msg);
     }
-    function setStatus(text, err=false){
-      statusEl.textContent = text;
-      statusEl.classList.toggle("err", !!err);
+    function setStatus(text, bad=false){
+      els.status.textContent = text;
+      els.status.classList.toggle("bad", !!bad);
     }
 
-    function playTestTone() {
+    // ==========================
+    //  State
+    // ==========================
+    let pc = null;
+    let localStream = null;
+    let closed = false;
+
+    // ==========================
+    //  Audio unlock (speaker test)
+    // ==========================
+    els.test.addEventListener("click", async () => {
       try{
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = "sine"; o.frequency.value = 880; // A5 beep
-        o.connect(g); g.connect(ctx.destination);
-        g.gain.setValueAtTime(0.0001, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
-        o.start();
-        setTimeout(()=>{
-          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.02);
-          o.stop(ctx.currentTime + 0.03);
-          ctx.close();
-        }, 250);
-      }catch(e){}
-    }
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.1;
+        osc.type = "sine";
+        osc.frequency.value = 880; // A5
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        setTimeout(()=>{ osc.stop(); ctx.close(); }, 240);
+        log("Played test beep.");
+      }catch(err){
+        log("Speaker test failed:", err.message || err);
+      }
+    });
 
-    async function start(){
+    // ==========================
+    //  Start / Hang Up
+    // ==========================
+    els.start.addEventListener("click", startCall);
+    els.hangup.addEventListener("click", hangup);
+
+    async function startCall(){
+      if (pc) { log("Already running; ignoring Start."); return; }
+
+      closed = false;
+      setStatus("starting…", false);
+      els.start.disabled = true;
+      els.hangup.disabled = false;
+
       try{
-        setStatus("requesting mic…");
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setStatus("mic granted");
-
-        // Ask our server for a session + client secret, clamp voice to supported list server-side
-        const v = encodeURIComponent(voiceSel.value || "shimmer");
-        const tokRes = await fetch(`/api/realtime-session?voice=${v}`);
-        if(!tokRes.ok){ log(`Token error ${tokRes.status}`, true); setStatus("token error", true); return; }
-        const token = await tokRes.json();
-        if(!token?.client_secret?.value){ log("Missing client_secret in token", true); setStatus("token error", true); return; }
-
-        // Create RTCPeerConnection
-        pc = new RTCPeerConnection();
-
-        // When Emma sends back audio, play it
-        pc.ontrack = (e)=>{
-          log("Remote audio stream received");
-          remoteAudio.srcObject = e.streams[0];
-          remoteAudio.play().catch(err => log("Autoplay blocked by browser: " + err, true));
-        };
-
-        // Helpful connection logging + auto-reconnect
-        pc.oniceconnectionstatechange = ()=>{
-          log("pc state: " + pc.connectionState);
-          if(["disconnected","failed"].includes(pc.connectionState)){
-            log("Connection dropped — restarting…");
-            hangup(false);
-            start();
-          }
-        };
-
-        // Send our mic to the model
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
-        // Create SDP offer, send to OpenAI, set remote answer
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        const baseUrl = "https://api.openai.com/v1/realtime";
-        const model = token.model || "gpt-4o-mini-realtime-preview";
-        const sdpResp = await fetch(`${baseUrl}?model=${encodeURIComponent(model)}`, {
-          method: "POST",
-          body: offer.sdp,
-          headers: {
-            Authorization: `Bearer ${token.client_secret.value}`,
-            "Content-Type": "application/sdp"
+        // 1) Mic permission
+        log("Requesting microphone…");
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
           }
         });
+        log("Mic granted.");
 
-        if(!sdpResp.ok){
-          const txt = await sdpResp.text();
-          log("SDP exchange failed: " + txt, true);
-          setStatus("sdp error", true);
-          return;
+        // 2) Create RTCPeerConnection
+        log("Creating RTCPeerConnection…");
+        pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+          bundlePolicy: "max-bundle"
+        });
+
+        // 3) Remote audio track hookup
+        pc.ontrack = (e) => {
+          if (!els.remote.srcObject) {
+            els.remote.srcObject = e.streams[0];
+            log("Remote audio stream received.");
+            // Try play immediately (some browsers need this)
+            els.remote.play().then(
+              ()=> log("Remote audio playback started."),
+              (err)=> log("Remote audio play blocked:", err?.message || err)
+            );
+          }
+        };
+
+        pc.onconnectionstatechange = () => {
+          log("pc state:", pc.connectionState);
+          if (["disconnected", "failed"].includes(pc.connectionState) && !closed) {
+            log("Connection dropped — attempting clean hangup.");
+            hangup();
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          log("ice:", pc.iceConnectionState);
+        };
+
+        // 4) Add our mic
+        for (const track of localStream.getTracks()){
+          pc.addTrack(track, localStream);
         }
 
-        const answer = { type: "answer", sdp: await sdpResp.text() };
-        await pc.setRemoteDescription(answer);
+        // 5) Create offer and wait for ICE to finish (non-trickle)
+        const offer = await pc.createOffer({ offerToReceiveAudio: true });
+        await pc.setLocalDescription(offer);
+        log("Created local SDP offer; waiting for ICE to complete…");
+        await waitForIceGatheringComplete(pc);
 
-        log(`✅ Session established on ${model}. Voice: ${token.voice || voiceSel.value}`);
+        // 6) Get a token (client_secret + model) from our serverless function
+        const voice = els.voice.value;
+        const tokenRes = await fetch(`${TOKEN_ENDPOINT}?voice=${encodeURIComponent(voice)}`);
+        log("Token response status:", tokenRes.status);
+        if (!tokenRes.ok){
+          const txt = await tokenRes.text().catch(()=>"(no body)");
+          log("Token fetch failed body:", txt);
+          throw new Error("Token endpoint error");
+        }
+        const token = await tokenRes.json();
+        // token = { client_secret: { value }, model, voice, max_minutes, … }
+        const secret = token?.client_secret?.value;
+        if (!secret){
+          log("Token JSON missing client_secret.value:", JSON.stringify(token));
+          throw new Error("Invalid token payload");
+        }
+        log(`Session established on ${token.model}. Voice: ${token.voice}.`);
+
+        // 7) Post SDP to OpenAI Realtime & set remote answer
+        const sdpUrl = SDP_ENDPOINT(token.model);
+        log("POSTing SDP to:", sdpUrl);
+        const answerRes = await fetch(sdpUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${secret}`,
+            "Content-Type": "application/sdp",
+            "OpenAI-Beta": "realtime=v1"
+          },
+          body: pc.localDescription.sdp
+        });
+
+        log("SDP POST status:", answerRes.status);
+        if (!answerRes.ok){
+          const body = await answerRes.text().catch(()=>"(no body)");
+          log("SDP exchange failed body:", body);
+          throw new Error("SDP exchange failed");
+        }
+        const answerSDP = await answerRes.text();
+        await pc.setRemoteDescription({ type: "answer", sdp: answerSDP });
+        log("Remote SDP answer set. You can speak anytime. (If you don’t hear Emma, click Test speaker, then Start again.)");
         setStatus("live (hands-free) ✨");
+
       }catch(err){
-        log("Error: " + (err?.message || err), true);
+        log("Error:", err?.message || err);
         setStatus("error", true);
+        els.hangup.disabled = true;
+        els.start.disabled = false;
+        // Clean partial state
+        safeClose();
       }
     }
 
-    function hangup(showEnded = true){
-      try{
-        if(pc){ pc.close(); pc = null; }
-        if(localStream){ localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-      }catch(e){}
-      if(showEnded){ setStatus("ended"); log("Call ended."); }
+    async function hangup(){
+      closed = true;
+      log("Call ended.");
+      setStatus("ended");
+      els.hangup.disabled = true;
+      els.start.disabled = false;
+      safeClose();
     }
 
-    // UI events
-    startBtn.addEventListener("click", async ()=>{
-      // A quick user gesture audio to help browsers allow remote autoplay
-      await remoteAudio.play().catch(()=>{});
-      await start();
-    });
-    hangupBtn.addEventListener("click", ()=> hangup(true));
-    testToneBtn.addEventListener("click", playTestTone);
+    function safeClose(){
+      try { if (pc) pc.close(); } catch {}
+      pc = null;
+      if (localStream){
+        for (const t of localStream.getTracks()) try{ t.stop(); }catch{}
+      }
+      localStream = null;
+      els.remote.srcObject = null;
+    }
 
-    // Clean up on nav away
-    window.addEventListener("beforeunload", ()=> hangup(false));
+    // Wait for ICE to gather all candidates (so we can non-trickle POST once)
+    function waitForIceGatheringComplete(pc){
+      if (pc.iceGatheringState === "complete") return Promise.resolve();
+      return new Promise(resolve=>{
+        function check(){
+          if (pc.iceGatheringState === "complete"){
+            pc.removeEventListener("icegatheringstatechange", check);
+            resolve();
+          }
+        }
+        pc.addEventListener("icegatheringstatechange", check);
+        // Safety timeout: proceed after 3.5s even if still "gathering"
+        setTimeout(()=>{
+          pc.removeEventListener("icegatheringstatechange", check);
+          resolve();
+        }, 3500);
+      });
+    }
   </script>
 </body>
 </html>
