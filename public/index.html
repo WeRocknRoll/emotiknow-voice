@@ -9,7 +9,7 @@
     --bg:#0b0f14;--panel:#111826;--stroke:#1b2537;--text:#eef3ff;--muted:#9fb0ca;
     --accent:#7c9cff;--ok:#79d08a;--err:#ff7e7e;--btn:#1e2738;--btn2:#242f44;
   }
-  html,body{background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:0}
+  html,body{background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0}
   .wrap{max-width:1200px;margin:24px auto 56px;padding:0 16px}
   h1{margin:0 0 6px;font-size:clamp(22px,3.2vw,32px);font-weight:800}
   .muted{color:var(--muted);font-size:14px}
@@ -21,8 +21,8 @@
   .vis{position:relative;width:100%;aspect-ratio:16/10;background:#0d1320;border-radius:10px;overflow:hidden}
   .portrait{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
   #mouth{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-  .cross{--s:20px;position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);
-         border:2px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,84,84,.55);pointer-events:none}
+  .cross{--s:18px;position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);
+         border:2px solid rgba(255,255,255,.75);border-radius:50%;background:rgba(255,84,84,.45);pointer-events:none}
   .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
   button,select,input[type=range]{background:var(--btn);color:var(--text);border:1px solid #2a3750;border-radius:10px}
   button,select{padding:9px 12px;font-size:14px;cursor:pointer}
@@ -76,8 +76,8 @@
 
           <button id="test">Test speaker</button>
 
-          <div class="ctrl"><label>Lip size</label><input id="lipSize" type="range" min="50" max="160" value="100"></div>
-          <div class="ctrl"><label>Sensitivity</label><input id="sens" type="range" min="50" max="200" value="100"></div>
+          <div class="ctrl"><label>Lip size</label><input id="lipSize" type="range" min="50" max="160" value="80"></div>
+          <div class="ctrl"><label>Sensitivity</label><input id="sens" type="range" min="50" max="200" value="140"></div>
           <div class="ctrl"><label>Gate</label><input id="gate" type="range" min="0" max="20" value="6"></div>
 
           <div class="ctrl" style="margin-left:auto">
@@ -106,7 +106,7 @@
 const vis = document.getElementById('vis');
 const img = document.getElementById('portrait');
 const canvas = document.getElementById('mouth');
-const ctx = canvas.getContext('2d', { alpha: true });
+const ctx = canvas.getContext('2d', { alpha:true });
 const target = document.getElementById('target');
 
 const startBtn = document.getElementById('start');
@@ -121,229 +121,222 @@ const vuBar   = document.getElementById('vu');
 
 const stateEl = document.getElementById('state');
 const logEl   = document.getElementById('log');
-const remoteEl = document.getElementById('remote');
+const remoteEl= document.getElementById('remote');
 
 /* ---------------- Mouth anchor (image space) ---------------- */
 const DEFAULT_MOUTH = { x: 523, y: 215 };
 function getMouth(){
-  try { const s = localStorage.getItem('emma_mouth_anchor'); if (s) return JSON.parse(s); } catch {}
+  try{ const s = localStorage.getItem('emma_mouth_anchor'); if (s) return JSON.parse(s);}catch{}
   return { ...DEFAULT_MOUTH };
 }
 function saveMouth(p){ localStorage.setItem('emma_mouth_anchor', JSON.stringify(p)); log(`Saved mouth: x=${p.x}, y=${p.y}`); }
 let mouthImg = getMouth();
 
 /* ---------------- Layout helpers ---------------- */
-function log(m){ const t = new Date().toLocaleTimeString(); logEl.textContent += `[${t}] ${m}\n`; logEl.scrollTop = logEl.scrollHeight; }
-function setState(s, ok=false, err=false){ stateEl.textContent = s; stateEl.classList.toggle('ok', ok); stateEl.classList.toggle('err', err); }
+function log(m){ const t=new Date().toLocaleTimeString(); logEl.textContent += `[${t}] ${m}\n`; logEl.scrollTop = logEl.scrollHeight; }
+function setState(s, ok=false, err=false){ stateEl.textContent=s; stateEl.classList.toggle('ok',ok); stateEl.classList.toggle('err',err); }
 
 function updateCanvasSize(){
-  const r = vis.getBoundingClientRect();
+  const r=vis.getBoundingClientRect();
   canvas.width  = Math.max(2, Math.floor(r.width  * devicePixelRatio));
   canvas.height = Math.max(2, Math.floor(r.height * devicePixelRatio));
-  canvas.style.width  = r.width + 'px';
-  canvas.style.height = r.height + 'px';
-  drawMouth(0);
-  placeTarget();
+  canvas.style.width=r.width+'px'; canvas.style.height=r.height+'px';
+  drawMouth(0); placeTarget();
 }
 function placeTarget(){
   const css = imgToCss(mouthImg.x, mouthImg.y);
-  target.style.left = css.x + 'px';
-  target.style.top  = css.y + 'px';
+  target.style.left = css.x+'px'; target.style.top = css.y+'px';
 }
-function imgToCss(ix, iy){
-  const r = vis.getBoundingClientRect();
-  const W = r.width, H = r.height;
-  const iw = img.naturalWidth || 1920, ih = img.naturalHeight || 1200;
-  const ir = iw/ih, br = W/H;
-  let dw, dh, ox, oy;
-  if (ir > br){ dh = H; dw = H*ir; ox = (W - dw)/2; oy = 0; }
-  else       { dw = W; dh = W/ir; ox = 0; oy = (H - dh)/2; }
-  return { x: ox + ix * (dw/iw), y: oy + iy * (dh/ih) };
+function imgToCss(ix,iy){
+  const r=vis.getBoundingClientRect(); const W=r.width,H=r.height;
+  const iw=img.naturalWidth||1920, ih=img.naturalHeight||1200;
+  const ir=iw/ih, br=W/H; let dw,dh,ox,oy;
+  if(ir>br){ dh=H; dw=H*ir; ox=(W-dw)/2; oy=0; } else { dw=W; dh=W/ir; ox=0; oy=(H-dh)/2; }
+  return { x: ox + ix*(dw/iw), y: oy + iy*(dh/ih) };
 }
-function cssToImg(cx, cy){
-  const r = vis.getBoundingClientRect();
-  const W = r.width, H = r.height;
-  const iw = img.naturalWidth || 1920, ih = img.naturalHeight || 1200;
-  const ir = iw/ih, br = W/H;
-  let dw, dh, ox, oy;
-  if (ir > br){ dh = H; dw = H*ir; ox = (W - dw)/2; oy = 0; }
-  else       { dw = W; dh = W/ir; ox = 0; oy = (H - dh)/2; }
-  return { x: (cx - ox) * (iw/dw), y: (cy - oy) * (ih/dh) };
+function cssToImg(cx,cy){
+  const r=vis.getBoundingClientRect(); const W=r.width,H=r.height;
+  const iw=img.naturalWidth||1920, ih=img.naturalHeight||1200;
+  const ir=iw/ih, br=W/H; let dw,dh,ox,oy;
+  if(ir>br){ dh=H; dw=H*ir; ox=(W-dw)/2; oy=0; } else { dw=W; dh=W/ir; ox=0; oy=(H-dh)/2; }
+  return { x:(cx-ox)*(iw/dw), y:(cy-oy)*(ih/dh) };
 }
 /* anchor picking */
-let dragging = false;
-vis.addEventListener('pointerdown', e => { dragging = true; setAnchor(e); });
-vis.addEventListener('pointermove', e => { if (dragging) setAnchor(e); });
-window.addEventListener('pointerup', () => dragging = false);
+let dragging=false;
+vis.addEventListener('pointerdown', e=>{ dragging=true; setAnchor(e); });
+vis.addEventListener('pointermove', e=>{ if(dragging) setAnchor(e); });
+window.addEventListener('pointerup', ()=> dragging=false);
 function setAnchor(e){
-  const r = vis.getBoundingClientRect();
-  const cx = e.clientX - r.left, cy = e.clientY - r.top;
-  mouthImg = cssToImg(cx, cy);
-  saveMouth(mouthImg); placeTarget();
+  const r=vis.getBoundingClientRect(); const cx=e.clientX-r.left, cy=e.clientY-r.top;
+  mouthImg = cssToImg(cx,cy); saveMouth(mouthImg); placeTarget();
 }
 
 /* ---------------- Realtime + audio analyzer ---------------- */
-let pc = null, localStream = null, analyser = null, raf = null, audioCtx = null;
-let env = 0; // smoothed envelope for mouth openness
+let pc=null, localStream=null;
+let audioCtx=null, analyser=null, raf=null;
+let env=0; // smoothed envelope
 
 async function start(){
   try{
-    await resumeAudio();
+    await ensureAudioContext();
     setState('requesting mic…'); log('Requesting microphone…');
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
 
     const v = voiceSel.value || 'shimmer';
     const tokRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}`);
-    if (!tokRes.ok){ throw new Error(`Token endpoint ${tokRes.status}: ${await tokRes.text()}`); }
+    if(!tokRes.ok) throw new Error(`Token endpoint ${tokRes.status}: ${await tokRes.text()}`);
     const token = await tokRes.json(); log(`Token response status: ${tokRes.status}`);
 
     pc = new RTCPeerConnection();
     pc.onconnectionstatechange = () => {
       log(`pc state: ${pc.connectionState}`);
-      if (['disconnected','failed','closed'].includes(pc.connectionState)) { setState('ended'); cleanup(); }
+      if(['disconnected','failed','closed'].includes(pc.connectionState)){ setState('ended'); cleanup(); }
     };
+
     pc.ontrack = (e) => {
-      remoteEl.srcObject = e.streams[0];
-      setupAnalyzer(remoteEl);
+      const stream = e.streams[0];
+      remoteEl.srcObject = stream;
+      // IMPORTANT: analyse the MediaStream directly (works even if element is not yet audible)
+      setupAnalyzerFromStream(stream);
       log('Remote audio stream received.');
     };
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
-    const offer = await pc.createOffer({ offerToReceiveAudio: true });
+    localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+
+    const offer = await pc.createOffer({ offerToReceiveAudio:true });
     await pc.setLocalDescription(offer);
     setState('connecting');
 
     const url = `https://api.openai.com/v1/realtime?model=${encodeURIComponent(token.model || 'gpt-4o-mini-realtime-preview')}`;
     log(`POSTing SDP to: ${url}`);
-    const sdpRes = await fetch(url, {
+    const sdpRes = await fetch(url,{
       method:'POST',
       headers:{
-        'Authorization': `Bearer ${token.client_secret.value}`,
-        'Content-Type': 'application/sdp',
-        'OpenAI-Beta': 'realtime=v1'
+        'Authorization':`Bearer ${token.client_secret.value}`,
+        'Content-Type':'application/sdp',
+        'OpenAI-Beta':'realtime=v1'
       },
-      body: offer.sdp
+      body:offer.sdp
     });
     log(`SDP POST status: ${sdpRes.status}`);
-    if (!sdpRes.ok){ throw new Error(`SDP exchange failed: ${await sdpRes.text()}`); }
+    if(!sdpRes.ok) throw new Error(`SDP exchange failed: ${await sdpRes.text()}`);
     const answer = { type:'answer', sdp: await sdpRes.text() };
     await pc.setRemoteDescription(answer);
 
-    setState('connected', true);
-    log('Session established.');
-  } catch(err){
-    console.error(err); log('Error: ' + err.message); setState('error', false, true);
+    setState('connected', true); log('Session established.');
+  }catch(err){
+    console.error(err); log('Error: '+err.message); setState('error', false, true);
     cleanup();
   }
 }
 function hang(){ log('Call ended. (user)'); setState('ended'); cleanup(); }
 function cleanup(){
-  if (pc){ try{ pc.close(); }catch{} pc=null; }
-  if (localStream){ localStream.getTracks().forEach(t => t.stop()); localStream=null; }
+  if(pc){ try{pc.close();}catch{} pc=null; }
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
   stopAnalyzer();
 }
 async function testSpeaker(){
-  await resumeAudio();
+  await ensureAudioContext();
   const ctx = new (window.AudioContext||window.webkitAudioContext)();
-  const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = .05;
-  o.frequency.value = 880; o.connect(g).connect(ctx.destination); o.start();
+  const o=ctx.createOscillator(), g=ctx.createGain(); g.gain.value=.05;
+  o.frequency.value=880; o.connect(g).connect(ctx.destination); o.start();
   await new Promise(r=>setTimeout(r,250)); o.stop(); await ctx.close();
 }
-async function resumeAudio(){
-  if (!audioCtx) return;
-  if (audioCtx.state === 'suspended'){ try{ await audioCtx.resume(); }catch{} }
+
+async function ensureAudioContext(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){ try{ await audioCtx.resume(); }catch{} }
 }
 
 /* --------- Analyzer + lip drawing --------- */
-function setupAnalyzer(audioEl){
+function setupAnalyzerFromStream(stream){
   stopAnalyzer();
-  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  const src = audioCtx.createMediaElementSource(audioEl);
+  // reuse a single AudioContext if we already created it
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  const src = audioCtx.createMediaStreamSource(stream);
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 2048;
-  src.connect(analyser); analyser.connect(audioCtx.destination);
-  env = 0;
+  src.connect(analyser); // no need to connect to destination; <audio> handles playback
+  env=0;
   tick();
 }
-function stopAnalyzer(){ if (raf) cancelAnimationFrame(raf); raf = null; drawMouth(0); vuBar.style.width='0%'; if (audioCtx){ try{audioCtx.close();}catch{} } audioCtx=null; analyser=null; }
+function stopAnalyzer(){
+  if(raf) cancelAnimationFrame(raf); raf=null;
+  analyser=null;
+  drawMouth(0); vuBar.style.width='0%';
+}
 
 const tmp = new Uint8Array(2048);
 function tick(){
-  if (!analyser){ drawMouth(0); return; }
+  if(!analyser){ drawMouth(0); return; }
   analyser.getByteTimeDomainData(tmp);
 
   // RMS around 128 baseline
-  let sum=0; for (let i=0;i<tmp.length;i++){ const d=tmp[i]-128; sum+=d*d; }
+  let sum=0; for(let i=0;i<tmp.length;i++){ const d=tmp[i]-128; sum+=d*d; }
   const rms = Math.sqrt(sum/tmp.length); // ~0..90
-  // normalize -> ~0..1 then apply sensitivity
-  const sensitivity = Number(sens.value)/100; // 1.0 default
+
+  // normalize -> 0..1 and apply user sensitivity/gate
+  const sensitivity = Number(sens.value)/100; // default 1.4
   let x = (rms/35) * sensitivity;
-  // gate to kill tiny background noise
   const gate = Number(gateCtl.value)/100; // 0..0.2
   x = Math.max(0, x - gate);
   x = Math.min(1, x);
 
-  // smoothed envelope (attack faster than release)
-  const attack = 0.18, release = 0.28;
+  // envelope smoothing
+  const attack=0.18, release=0.28;
   env += (x - env) * (x > env ? attack : release);
 
-  // VU meter
-  vuBar.style.width = (Math.min(1, env)*100).toFixed(0)+'%';
-
+  vuBar.style.width = (Math.min(1,env)*100).toFixed(0)+'%';
   drawMouth(env);
   raf = requestAnimationFrame(tick);
 }
 
-/* --------- Drawing (smaller & subtle) --------- */
+/* --------- Drawing (smaller & subtle by default) --------- */
 function drawMouth(open){
-  const r = vis.getBoundingClientRect();
+  const r=vis.getBoundingClientRect();
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Map anchor to canvas pixels
   const css = imgToCss(mouthImg.x, mouthImg.y);
   const px = css.x * (canvas.width / r.width);
   const py = css.y * (canvas.height/ r.height);
 
-  // Tunables (small by default; scale by slider)
-  const scale = Number(lipSize.value)/100; // 1.0 default
-  const baseW = 16 * devicePixelRatio * scale;  // narrower
-  const baseH =  6 * devicePixelRatio * scale;
-  const amp   = 14 * devicePixelRatio * scale;  // opening range
+  const scale = Number(lipSize.value)/100; // default 0.8
+  const baseW = 10 * devicePixelRatio * scale;  // narrower
+  const baseH =  4 * devicePixelRatio * scale;
+  const amp   =  8 * devicePixelRatio * scale;  // opening range
   const mw = baseW;
   const mh = baseH + amp * open;
 
   ctx.save();
   ctx.translate(px, py);
 
-  // inner mouth (very subtle, not cartoon red)
-  ctx.fillStyle = 'rgba(210, 90, 100, 0.65)';   // mellow rose
+  // subtle inner oval
+  ctx.fillStyle = 'rgba(210, 90, 100, 0.55)';
   drawOval(ctx, 0, 0, mw, mh);
   ctx.fill();
 
-  // soft highlight to keep it natural
   const g = ctx.createRadialGradient(0,0,2, 0,0, mw);
-  g.addColorStop(0,'rgba(240,170,180,0.50)');
-  g.addColorStop(1,'rgba(200, 70, 90, 0.12)');
+  g.addColorStop(0,'rgba(240,170,180,0.45)');
+  g.addColorStop(1,'rgba(200, 70, 90, 0.10)');
   ctx.fillStyle = g;
   drawOval(ctx, 0, 0, mw*0.88, mh*0.78);
   ctx.fill();
 
-  // faint edge
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-  ctx.lineWidth = 1.5 * devicePixelRatio;
-  drawOval(ctx, 0, 0, mw, mh);
+  ctx.strokeStyle='rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1.2*devicePixelRatio;
+  drawOval(ctx,0,0,mw,mh);
   ctx.stroke();
 
   ctx.restore();
 }
-function drawOval(c, cx, cy, rx, ry){ c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2); c.closePath(); }
+function drawOval(c,cx,cy,rx,ry){ c.beginPath(); c.ellipse(cx,cy,rx,ry,0,0,Math.PI*2); c.closePath(); }
 
 /* ---------------- Events & init ---------------- */
 startBtn.addEventListener('click', start);
 hangBtn.addEventListener('click', hang);
 testBtn.addEventListener('click', testSpeaker);
 window.addEventListener('resize', updateCanvasSize);
-img.addEventListener('load', () => { updateCanvasSize(); placeTarget(); });
+img.addEventListener('load', ()=>{ updateCanvasSize(); placeTarget(); });
 
 function init(){ updateCanvasSize(); placeTarget(); setState('idle'); log('Ready. Click Start; if muted, Test speaker then Start again.'); }
 init();
