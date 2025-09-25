@@ -240,39 +240,43 @@
     img.src = '/Emma_EmotiKnow_Companion.png';
 
     // ---- MOUTH PLACEMENT (original 1600x960 coordinate system)
-    //   Adjust these if needed after testing:
-    const MOUTH_X  = 800;  // center X
-    const MOUTH_Y  = 610;  // moved DOWN (bigger -> lower)
-    const MOUTH_W  = 88;   // width (左右)
-    const MOUTH_H0 = 10;   // closed thickness
-    const MOUTH_HMAX = 70; // max opening
+    // Base size of the source image (set after image loads)
+let BASE_W = 1600;
+let BASE_H = 960;
 
-    // Tweaks to audio->mouth curve (0..1)
-    let mouthOpen = 0;     // smoothed value 0..1
+// Mouth defaults (you’ll overwrite with DEBUG_PICK values)
+const MOUTH_X  = 800;
+const MOUTH_Y  = 520;  // quick guess that’s ~100px higher than before
+const MOUTH_W  = 88;
+const MOUTH_H0 = 10;
+const MOUTH_HMAX = 70;
 
-    // DPR sizing so the image is razor sharp
-    function resizeAvatarToCSS(){
-      const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(3, window.devicePixelRatio || 1);
-      const w = Math.max(1, Math.floor(rect.width * dpr));
-      const h = Math.max(1, Math.floor(rect.width * (960/1600) * dpr));
-      if (canvas.width !== w || canvas.height !== h){
-        canvas.width = w;
-        canvas.height = h;
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        drawAvatar(0);
-      }
-    }
-    const ro = new ResizeObserver(resizeAvatarToCSS);
-    ro.observe(canvas);
-    img.onload = ()=>{ resizeAvatarToCSS(); };
+// After image loads, use the real intrinsic size:
+img.onload = () => {
+  BASE_W = img.naturalWidth  || BASE_W;
+  BASE_H = img.naturalHeight || BASE_H;
+  resizeAvatarToCSS();
+};
 
-    // Map original 1600x960 -> current canvas pixels
-    function mapX(x){ return x * (canvas.width / 1600); }
-    function mapY(y){ return y * (canvas.height / 960);  }
-    function mapW(w){ return w * (canvas.width / 1600);  }
+// Use BASE_W / BASE_H everywhere for mapping
+function mapX(x){ return x * (canvas.width  / BASE_W); }
+function mapY(y){ return y * (canvas.height / BASE_H); }
+function mapW(w){ return w * (canvas.width  / BASE_W); }
 
+// Also update the aspect ratio in resize function:
+function resizeAvatarToCSS(){
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const w = Math.max(1, Math.floor(rect.width * dpr));
+  const h = Math.max(1, Math.floor(rect.width * (BASE_H/BASE_W) * dpr));
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w;
+    canvas.height = h;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    drawAvatar(0);
+  }
+}
     function drawMouth(open01){
       const w = mapW(MOUTH_W);
       const h = mapY(MOUTH_H0 + (MOUTH_HMAX - MOUTH_H0) * open01) - mapY(0);
