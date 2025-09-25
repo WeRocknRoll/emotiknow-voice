@@ -239,93 +239,135 @@
     const img = new Image();
     img.src = '/Emma_EmotiKnow_Companion.png';
 
-    // ---- MOUTH PLACEMENT (original 1600x960 coordinate system)
-    // Base size of the source image (set after image loads)
-let BASE_W = 1600;
-let BASE_H = 960;
+    /***********  MOUTH + MAPPING (drop-in)  **********/
+let BASE_W = 1600;   // will be replaced by img.naturalWidth
+let BASE_H = 960;    // will be replaced by img.naturalHeight
 
-// Mouth defaults (you’ll overwrite with DEBUG_PICK values)
-const MOUTH_X  = 800;
-const MOUTH_Y  = 520;  // quick guess that’s ~100px higher than before
-const MOUTH_W  = 88;
-const MOUTH_H0 = 10;
-const MOUTH_HMAX = 70;
+// Persistent mouth placement (center of lips) — localStorage backed
+const MOUTH_KEY = 'emmaMouth';
+function loadMouth() {
+  try { return JSON.parse(localStorage.getItem(MOUTH_KEY)) || null; }
+  catch { return null; }
+}
+function saveMouth(m) {
+  localStorage.setItem(MOUTH_KEY, JSON.stringify(m));
+  console.log('Saved mouth →', m);
+}
 
-// After image loads, use the real intrinsic size:
+let MOUTH = loadMouth() || { x: 800, y: 520, w: 88, h0: 10, hmax: 70 };
+
+// Mapping: image-space → canvas-space (respects devicePixelRatio)
+function mapX(x){ return x * (canvas.width  / BASE_W); }
+function mapY(y){ return y * (canvas.height / BASE_H); }
+function mapW(w){ return w * (canvas.width  / BASE_W); }
+function mapH(h){ return h * (canvas.height / BASE_H); }
+
+// Draw overlay helpers
+let overlayOn = true;          // toggle with "O"
+let showPickHint = false;      // shows "click to place mouth"
+
+function drawOverlay(){
+  if (!overlayOn) return;
+  const cx = mapX(MOUTH.x), cy = mapY(MOUTH.y);
+  const r = Math.max(6, mapW(6));
+
+  // crosshair
+  ctx.save();
+  ctx.lineWidth = 1 * (window.devicePixelRatio || 1);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath(); ctx.moveTo(cx-30, cy); ctx.lineTo(cx+30, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy-30); ctx.lineTo(cx, cy+30); ctx.stroke();
+
+  // red mouth circle
+  ctx.fillStyle = 'rgba(255, 64, 64, 0.9)';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+
+  // info text
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = `${12*(window.devicePixelRatio||1)}px system-ui, sans-serif`;
+  ctx.fillText(`MOUTH (img space): x=${MOUTH.x} y=${MOUTH.y}`, 12*(window.devicePixelRatio||1), 18*(window.devicePixelRatio||1));
+  if (showPickHint) ctx.fillText(`Click the center of the lips`, 12*(window.devicePixelRatio||1), 34*(window.devicePixelRatio||1));
+  ctx.restore();
+}
+
+/***********  IMAGE LOAD + RESIZE  **********/
+const img = new Image();
+// cache-bust the image to avoid stale drawing while testing
+img.src = '/Emma_EmotiKnow_Companion.png?v=3';
+
 img.onload = () => {
   BASE_W = img.naturalWidth  || BASE_W;
   BASE_H = img.naturalHeight || BASE_H;
   resizeAvatarToCSS();
+  drawAvatar(0);
 };
 
-// Use BASE_W / BASE_H everywhere for mapping
-function mapX(x){ return x * (canvas.width  / BASE_W); }
-function mapY(y){ return y * (canvas.height / BASE_H); }
-function mapW(w){ return w * (canvas.width  / BASE_W); }
-
-// Also update the aspect ratio in resize function:
 function resizeAvatarToCSS(){
   const rect = canvas.getBoundingClientRect();
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   const w = Math.max(1, Math.floor(rect.width * dpr));
   const h = Math.max(1, Math.floor(rect.width * (BASE_H/BASE_W) * dpr));
   if (canvas.width !== w || canvas.height !== h){
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = w; canvas.height = h;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    drawAvatar(0);
   }
 }
-    function drawMouth(open01){
-      const w = mapW(MOUTH_W);
-      const h = mapY(MOUTH_H0 + (MOUTH_HMAX - MOUTH_H0) * open01) - mapY(0);
-      const cx = mapX(MOUTH_X);
-      const cy = mapY(MOUTH_Y);
 
-      ctx.save();
-      ctx.translate(cx, cy);
+// In your drawAvatar(amplitude) function, make sure it uses the mapping above
+// and calls drawOverlay() at the end. Example:
+//
+// function drawAvatar(amplitude){
+//   // Background portrait
+//   ctx.drawImage(img, 0, 0, BASE_W, BASE_H, 0, 0, canvas.width, canvas.height);
+//
+//   // Simple mouth patch (replace with your current mouth animation code)
+//   const cx = mapX(MOUTH.x), cy = mapY(MOUTH.y);
+//   const mouthW = mapW(MOUTH.w);
+//   const mouthH = mapH(MOUTH.h0 + (MOUTH.hmax - MOUTH.h0) * amplitude);
+//   ctx.fillStyle = 'rgba(255, 64, 64, 0.35)'; // temp visualization
+//   ctx.beginPath(); ctx.ellipse(cx, cy, mouthW/2, mouthH/2, 0, 0, Math.PI*2); ctx.fill();
+//
+//   drawOverlay();
+// }
 
-      // simple rounded-rect mouth (top+bottom)
-      const r = Math.min(w*0.45, h*0.6);
-      ctx.fillStyle = '#0b0b0b';
-      roundRect(ctx, -w/2, -h/2, w, h, r);
-      ctx.fill();
+/***********  PICKING & KEYBOARD  **********/
+canvas.addEventListener('mousedown', (e) => {
+  showPickHint = false;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(3, window.devicePixelRatio||1);
+  const cx = (e.clientX - rect.left) * dpr;
+  const cy = (e.clientY - rect.top)  * dpr;
 
-      // inner shadow / highlight
-      const grad = ctx.createLinearGradient(0,-h/2,0,h/2);
-      grad.addColorStop(0, 'rgba(255,255,255,.08)');
-      grad.addColorStop(.5,'rgba(255,255,255,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,.25)');
-      ctx.fillStyle = grad;
-      roundRect(ctx, -w/2, -h/2, w, h, r);
-      ctx.fill();
+  // Convert canvas-space → image-space
+  const imgX = Math.round(cx * (BASE_W / canvas.width));
+  const imgY = Math.round(cy * (BASE_H / canvas.height));
+  MOUTH.x = imgX; MOUTH.y = imgY;
+  drawAvatar(0);
+  console.log(`Picked MOUTH img-space → x=${imgX}, y=${imgY}`);
+});
 
-      ctx.restore();
-    }
-    function roundRect(ctx, x, y, w, h, r){
-      const rr = Math.max(0, Math.min(r, Math.min(w,h)/2));
-      ctx.beginPath();
-      ctx.moveTo(x+rr, y);
-      ctx.lineTo(x+w-rr, y);
-      ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
-      ctx.lineTo(x+w, y+h-rr);
-      ctx.quadraticCurveTo(x+w, y+h, x+w-rr, y+h);
-      ctx.lineTo(x+rr, y+h);
-      ctx.quadraticCurveTo(x, y+h, x, y+h-rr);
-      ctx.lineTo(x, y+rr);
-      ctx.quadraticCurveTo(x, y, x+rr, y);
-      ctx.closePath();
-    }
+window.addEventListener('keydown', (e) => {
+  const step = e.shiftKey ? 10 : 2;
+  let changed = false;
+  if (e.key === 'ArrowLeft')  { MOUTH.x = Math.max(0, MOUTH.x - step); changed = true; }
+  if (e.key === 'ArrowRight') { MOUTH.x = Math.min(BASE_W, MOUTH.x + step); changed = true; }
+  if (e.key === 'ArrowUp')    { MOUTH.y = Math.max(0, MOUTH.y - step); changed = true; }
+  if (e.key === 'ArrowDown')  { MOUTH.y = Math.min(BASE_H, MOUTH.y + step); changed = true; }
 
-    function drawAvatar(open01){
-      if (!img.complete) return;
-      // draw image full-bleed into canvas
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      // draw mouth
-      drawMouth(open01);
-    }
+  if (e.key.toLowerCase() === 'o') { overlayOn = !overlayOn; changed = true; }
+  if (e.key === 'Enter') { saveMouth(MOUTH); }
+  if (e.key.toLowerCase() === 'r') {
+    localStorage.removeItem(MOUTH_KEY);
+    MOUTH = { x: 800, y: 520, w: 88, h0: 10, hmax: 70 };
+    showPickHint = true; changed = true;
+  }
+  if (changed) drawAvatar(0);
+});
 
+// First-run hint
+if (!loadMouth()) showPickHint = true;
+/***********  END PATCH  **********/
     // ==============================
     // Audio analysis for mouth
     // ==============================
