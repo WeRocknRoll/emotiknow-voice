@@ -5,337 +5,303 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EmotiKnow — Emma (Voice Companion)</title>
   <style>
-    :root{
-      --bg:#0c0f14; --card:#121722; --ink:#eef2ff; --muted:#97a3b6;
-      --brand:#8b7df2; --brand-2:#ffa84c; --ok:#42d392; --warn:#ffb020;
+    :root {
+      --bg: #0b0f12;
+      --panel: #121821;
+      --text: #e9eef5;
+      --muted: #9fb0c3;
+      --accent: #8b7cf6;
+      --btn: #6f5ff0;
+      --btn2:#f08a55;
+      --ok:#53d8a4;
+      --err:#ff6b6b;
     }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:radial-gradient(1200px 600px at 50% -10%, #1a2332 0, #0c0f14 60%);
-      color:var(--ink); font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-    }
-    .wrap{
-      max-width:1060px; margin:28px auto; padding:0 18px;
-    }
-    h1{
-      font-weight:800; letter-spacing:.2px; margin:0 0 6px;
-      font-size:clamp(24px, 3.6vw, 42px);
-    }
-    .sub{
-      color:var(--muted); margin:4px 0 14px; font-size:15px;
-    }
-    .bar{
-      display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0 14px;
-    }
-    button,.select{
-      border:1px solid #2b3240; background:#1a2130; color:var(--ink);
-      border-radius:12px; padding:10px 14px; font-weight:700;
-      cursor:pointer; transition:.2s ease; outline:none;
-    }
-    button:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(0,0,0,.25); }
-    button.primary{ background:linear-gradient(180deg, #7367f0, #6157f6); border-color:transparent; }
-    button.danger{ background:#2a1a16; border-color:#41221b; color:#ffcab3; }
-    button.ghost{ background:#131822; border-color:#20293a; }
-    .select select{
-      appearance:none; border:none; background:transparent; color:var(--ink); font-weight:700;
-    }
-    .badge{
-      margin-left:auto; color:#9dd6ac; font-weight:800; letter-spacing:.4px;
-    }
-    .badge.error{ color:#ff8f8f }
-    .panel{
-      background:var(--card); border:1px solid #1f2534; border-radius:18px;
-      padding:12px; min-height:220px; max-height:46vh; overflow:auto;
-      font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-      white-space:pre-wrap;
-    }
-    .tip{ color:#8ea0b8; font-size:13px; text-align:center; margin:10px 4px 0; }
-    .emma-hero{
-      display:flex; justify-content:center; margin:18px 0 10px;
-    }
-    #emma{
-      width:min(700px, 95vw);
-      max-height:46vh; object-fit:cover; border-radius:16px;
-      box-shadow:0 10px 30px rgba(0,0,0,.28);
-      transition:box-shadow .25s ease, transform .25s ease, filter .2s ease;
-    }
-    #emma.talking{
-      box-shadow:0 0 0 0 rgba(255,170,70,.55),
-                 0 0 64px 18px rgba(255,170,70,.22);
-      transform:translateY(-2px);
-      filter:saturate(1.06);
-    }
-    .muted{ color:#73839c; }
-    .small{ font-size:12px; }
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
+    .shell{max-width:1100px;margin:0 auto;padding:28px}
+    h1{font-weight:800;letter-spacing:.3px;margin:0 0 14px}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:minmax(280px,500px) 1fr;gap:22px;align-items:start}
+    .avatarWrap{background:var(--panel);border-radius:16px;padding:12px}
+    canvas#avatar{width:100%;height:auto;border-radius:12px;background:#000}
+    .row{display:flex;gap:10px;align-items:center;margin:10px 0 0}
+    .btn{border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+    .btn-p{background:var(--btn);color:#fff}
+    .btn-o{background:var(--btn2);color:#fff}
+    .select{appearance:none;background:#1a2330;color:#fff;border:1px solid #283446;border-radius:10px;padding:10px 12px}
+    .status{font-weight:700}
+    .status.ok{color:var(--ok)}
+    .status.err{color:var(--err)}
+    .log{background:#0f141a;border:1px solid #1c2531;border-radius:12px;padding:12px;height:360px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+    .tip{color:#9bb0c6;margin-top:10px}
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="shell">
     <h1>EmotiKnow — Emma (Voice Companion)</h1>
-    <p class="sub">
-      Click <b>Start</b> to allow your microphone. Talk naturally; Emma replies in real time.
-    </p>
+    <p class="muted">Click <b>Start</b> once to allow your microphone. Talk naturally; Emma replies in real time. Her portrait lipsyncs to the audio.</p>
 
-    <!-- Emma image -->
-    <div class="emma-hero">
-      <img id="emma" src="/Emma_EmotiKnow_Companion.png" alt="Emma — EmotiKnow Companion" />
-    </div>
-
-    <!-- Controls -->
-    <div class="bar">
-      <button class="primary" id="start">Start</button>
-      <button class="danger" id="hangup">Hang Up</button>
-
-      <div class="select">
-        <select id="voice">
-          <!-- Only supported voices -->
-          <option value="shimmer" selected>Shimmer (female, bright)</option>
-          <option value="coral">Coral (female, clear)</option>
-          <option value="sage">Sage (female, soft)</option>
-          <option value="marin">Marin (female, warm)</option>
-          <option value="ballad">Ballad (feminine, lyrical)</option>
-          <option value="verse">Verse (neutral)</option>
-          <option value="alloy">Alloy (neutral)</option>
-          <option value="echo">Echo (neutral)</option>
-          <option value="ash">Ash (neutral)</option>
-          <option value="cedar">Cedar (neutral)</option>
-        </select>
+    <div class="grid">
+      <!-- Avatar -->
+      <div class="avatarWrap">
+        <!-- Canvas draws the PNG and a procedural mouth -->
+        <canvas id="avatar" width="1600" height="960"></canvas>
+        <div class="row">
+          <button id="start" class="btn btn-p">Start</button>
+          <button id="hangup" class="btn btn-o">Hang Up</button>
+          <select id="voice" class="select">
+            <option value="shimmer" selected>Shimmer (female, bright)</option>
+            <option value="coral">Coral (female, clear)</option>
+            <option value="sage">Sage (female, soft)</option>
+            <option value="marin">Marin (female, warm)</option>
+            <option value="ballad">Ballad (feminine, lyrical)</option>
+            <option value="verse">Verse (neutral)</option>
+            <option value="alloy">Alloy (neutral)</option>
+            <option value="echo">Echo</option>
+            <option value="ash">Ash</option>
+            <option value="cedar">Cedar</option>
+          </select>
+          <button id="test" class="btn">Test speaker</button>
+          <span id="state" class="status">ended</span>
+        </div>
       </div>
 
-      <button class="ghost" id="test">Test speaker</button>
-
-      <span id="status" class="badge">ended</span>
+      <!-- Console -->
+      <div>
+        <div id="log" class="log" aria-live="polite"></div>
+        <p class="tip">Tip: If you don’t hear Emma, click <b>Test speaker</b>, then click <b>Start</b> again (autoplay can be blocked).</p>
+      </div>
     </div>
-
-    <div id="log" class="panel" aria-live="polite"></div>
-    <p class="tip small muted">
-      Tip: If you don’t hear Emma, click <b>Test speaker</b> (autoplay), then click <b>Start</b> again. If Emma goes quiet, just say something—she’ll pick it up.
-    </p>
   </div>
 
-  <!-- Hidden audio element that plays Emma -->
-  <audio id="remoteAudio" autoplay></audio>
+  <!-- Hidden remote audio for RTC -->
+  <audio id="remote" autoplay playsinline></audio>
 
   <script>
-    // ---------- Elements ----------
-    const logEl        = document.getElementById('log');
-    const statusEl     = document.getElementById('status');
-    const startBtn     = document.getElementById('start');
-    const hangupBtn    = document.getElementById('hangup');
-    const testBtn      = document.getElementById('test');
-    const voiceSel     = document.getElementById('voice');
-    const remoteAudio  = document.getElementById('remoteAudio');
-    const emmaImg      = document.getElementById('emma');
+    // ---------- ELEMENTS ----------
+    const startBtn = document.getElementById('start');
+    const hangupBtn = document.getElementById('hangup');
+    const testBtn   = document.getElementById('test');
+    const voiceSel  = document.getElementById('voice');
+    const stateEl   = document.getElementById('state');
+    const logEl     = document.getElementById('log');
+    const remoteEl  = document.getElementById('remote');
 
-    // ---------- State ----------
-    let pc = null, localStream = null, ended = true;
-    let idleTimer = null;
+    // Avatar canvas + image
+    const canvas  = document.getElementById('avatar');
+    const ctx     = canvas.getContext('2d', { alpha: false });
+    const avatarImg = new Image();
+    avatarImg.src = '/Emma_EmotiKnow_Companion.png';   // your current PNG in /public
 
-    function log(msg){
-      const ts = new Date().toLocaleTimeString();
-      logEl.textContent += `[${ts}] ${msg}\n`;
+    // ---------- LOG ----------
+    function log(s){
+      const t = new Date().toLocaleTimeString();
+      logEl.textContent += `[${t}] ${s}\n`;
       logEl.scrollTop = logEl.scrollHeight;
     }
-    function setStatus(s){
-      statusEl.textContent = s;
-      statusEl.classList.toggle('error', s.includes('error'));
-    }
+    function setStatus(s, cls=null){ stateEl.textContent=s; stateEl.className = 'status ' + (cls||''); }
 
-    // ---------- Talking glow ----------
-    function attachTalkingGlow(audioEl, imgEl){
-      try{
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        const ctx = new Ctx();
-        const src = ctx.createMediaElementSource(audioEl);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        src.connect(analyser);
-        analyser.connect(ctx.destination);
+    // ---------- WEBRTC ----------
+    let pc = null, localStream = null;
 
-        const buf = new Uint8Array(analyser.frequencyBinCount);
-
-        function tick(){
-          analyser.getByteTimeDomainData(buf);
-          let sum=0;
-          for(let i=0;i<buf.length;i++){
-            const v=(buf[i]-128)/128;
-            sum+=v*v;
-          }
-          const rms = Math.sqrt(sum/buf.length);
-          if (rms > 0.045) imgEl.classList.add('talking');
-          else imgEl.classList.remove('talking');
-          requestAnimationFrame(tick);
-        }
-
-        audioEl.addEventListener('play', () => ctx.resume(), {once:true});
-        if (ctx.state !== 'running') ctx.resume();
-        tick();
-      }catch(e){
-        console.warn('Talking glow not available:', e);
-      }
-    }
-    attachTalkingGlow(remoteAudio, emmaImg);
-
-    // ---------- Idle saver (optional) ----------
-    function armIdleTimeout(ms=48000){
-      clearIdle();
-      idleTimer = setTimeout(() => {
-        log('No user speech for a while — ending to save cost');
-        hangup();
-      }, ms);
-    }
-    function clearIdle(){
-      if (idleTimer){ clearTimeout(idleTimer); idleTimer=null; }
-    }
-
-    // ---------- Core: Start a session ----------
     async function start(){
-      try{
-        if (pc) hangup();
+      setStatus('starting…');
+      log('Requesting microphone…');
+      localStream = await navigator.mediaDevices.getUserMedia({audio:true});
+      log('Mic granted.');
 
-        setStatus('requesting mic…');
-        log('Requesting microphone…');
-        localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-        setStatus('mic granted.');
+      // get token from our serverless function
+      const voice = voiceSel.value;
+      const res = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}`);
+      if(!res.ok){
+        setStatus('error','err'); log(`Token error: ${res.status}`); return;
+      }
+      const token = await res.json();
+      log(`Token response status: ${res.status}`);
 
-        // 1) Get an ephemeral key + model from your serverless token endpoint
-        const v = voiceSel.value;
-        const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}`);
-        if (!tokenRes.ok){
-          const body = await tokenRes.text();
-          log(`Token response status: ${tokenRes.status}\n${body}`);
-          setStatus('error');
-          return;
-        }
-        const token = await tokenRes.json();
-        log(`Token response status: ${tokenRes.status}`);
+      pc = new RTCPeerConnection();
+      pc.oniceconnectionstatechange = () => log(`pc state: ${pc.iceConnectionState}`);
 
-        // 2) Peer connection
-        pc = new RTCPeerConnection();
-        ended = false;
+      // Remote track -> audio element
+      pc.ontrack = (e) => {
+        remoteEl.srcObject = e.streams[0];
+        // Hook avatar to this remote stream
+        hookAvatarToStream(e.streams[0]);
+        log('Remote audio stream received.');
+      };
 
-        pc.ontrack = (e) => {
-          remoteAudio.srcObject = e.streams[0];
-          log('Remote audio stream received.');
-        };
-        pc.oniceconnectionstatechange = () => log(`ice: ${pc.iceConnectionState}`);
-        pc.onconnectionstatechange = () => {
-          log(`pc state: ${pc.connectionState}`);
-          if (['failed','disconnected'].includes(pc.connectionState)){
-            log('Connection dropped — closing.');
-            hangup();
+      // Add local mic
+      for(const track of localStream.getTracks()){
+        pc.addTrack(track, localStream);
+      }
+
+      // Offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      log('Created local SDP offer; waiting for ICE to complete…');
+
+      // Wait ICE gather
+      await new Promise(resolve => {
+        if(pc.iceGatheringState === 'complete') return resolve();
+        const chk = () => {
+          if(pc.iceGatheringState === 'complete'){
+            pc.removeEventListener('icegatheringstatechange', chk);
+            resolve();
           }
         };
+        pc.addEventListener('icegatheringstatechange', chk);
+      });
 
-        // 3) Add local mic
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+      // POST SDP to OpenAI
+      const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token.client_secret.value}`,
+          'Content-Type': 'application/sdp'
+        },
+        body: pc.localDescription.sdp
+      });
 
-        // 4) Create local offer
-        const offer = await pc.createOffer({ offerToReceiveAudio:true, offerToReceiveVideo:false });
-        await pc.setLocalDescription(offer);
-        log('Created local SDP offer; waiting for ICE to complete…');
+      log(`SDP POST status: ${sdpRes.status}`);
 
-        // 5) POST SDP to OpenAI Realtime with the ephemeral key
-        const model = token.model || 'gpt-4o-mini-realtime-preview';
-        const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
-          method:'POST',
-          body: offer.sdp,
-          headers:{
-            Authorization: `Bearer ${token.client_secret?.value || token.client_secret}`,
-            'Content-Type': 'application/sdp'
-          }
-        });
-        if (!sdpRes.ok){
-          const body = await sdpRes.text();
-          log(`SDP POST status: ${sdpRes.status}\n${body}`);
-          setStatus('error');
-          return;
-        }
-        log(`SDP POST status: ${sdpRes.status}`);
-
-        // 6) Set remote description
-        const answerSDP = await sdpRes.text();
-        await pc.setRemoteDescription({ type:'answer', sdp: answerSDP });
-
-        setStatus(`live`);
-        log(`Session established on ${model}. Voice: ${v}.`);
-        log('Remote SDP answer set. You can speak anytime. (If you don’t hear Emma, click Test speaker, then Start again.)');
-
-        // keep an idle saver
-        armIdleTimeout();
-
-      }catch(err){
-        console.error(err);
-        log(`Error: ${err.message || err}`);
-        setStatus('error');
+      if(!sdpRes.ok){
+        setStatus('error','err');
+        log(`SDP error body: ${await sdpRes.text()}`);
+        return;
       }
+
+      const answer = { type:'answer', sdp: await sdpRes.text() };
+      await pc.setRemoteDescription(answer);
+      setStatus('live','ok');
+      log(`Session established on ${token.model}. Voice: ${token.voice}.`);
+      log('Remote audio playback started.');
     }
 
-    // ---------- Hang up ----------
-    function hangup(){
-      try{
-        setStatus('ended');
-        ended = true;
-        clearIdle();
-
-        if (pc){
-          pc.ontrack = pc.oniceconnectionstatechange = pc.onconnectionstatechange = null;
-          pc.getSenders?.().forEach(s => s.track?.stop());
-          pc.close();
-          pc = null;
-        }
-        if (localStream){
-          localStream.getTracks().forEach(t => t.stop());
-          localStream = null;
-        }
-        // Clear remote stream gracefully
-        if (remoteAudio.srcObject){
-          remoteAudio.srcObject.getTracks().forEach(t => t.stop());
-          remoteAudio.srcObject = null;
-        }
-        log('Call ended.');
-      }catch(e){
-        console.warn('hangup error', e);
-      }
+    async function hangup(){
+      if(pc){ pc.close(); pc=null; }
+      if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+      setStatus('ended');
+      log('Call ended.');
+      stopAvatar();
     }
 
-    // ---------- Test speaker (unblocks autoplay) ----------
-    testBtn.addEventListener('click', async () => {
-      try{
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type='sine';
-        o.frequency.value = 880;
-        g.gain.value = 0.05;
-        o.connect(g).connect(ctx.destination);
-        o.start();
-        setTimeout(()=>{ o.stop(); ctx.close(); }, 150);
-      }catch(e){ /* ignore */ }
+    startBtn.onclick = start;
+    hangupBtn.onclick = hangup;
+
+    // Simple test ping to ensure autoplay is unlocked
+    testBtn.onclick = ()=>{
+      const test = new Audio();
+      test.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA='; // tiny silent wav
+      test.play().catch(()=>{});
+    };
+
+    // ---------- AVATAR + AUDIO ANALYSER (real-time lipsync) ----------
+    // These constants describe Emma's mouth position in the original PNG (1600x960).
+    // Adjust if you swap the portrait.
+    const MOUTH_X  = 800;   // center x
+    const MOUTH_Y  = 545;   // center y
+    const MOUTH_W  = 95;    // full width of the mouth ellipse
+    const MOUTH_H0 = 10;    // base (closed) height
+    const MOUTH_HMAX = 70;  // max open height
+
+    // internal
+    let analyser, data, rafId;
+    let audioCtx, streamSrc;
+    let lastOpen = 0;
+
+    avatarImg.onload = ()=> drawAvatar(0);
+
+    function hookAvatarToStream(remoteStream){
+      // Create analyser from remote audio stream
+      if(audioCtx) audioCtx.close().catch(()=>{});
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      streamSrc = audioCtx.createMediaStreamSource(remoteStream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.85;
+      data = new Uint8Array(analyser.frequencyBinCount);
+      streamSrc.connect(analyser);
+
+      startAvatar();
+    }
+
+    function startAvatar(){
+      cancelAnimationFrame(rafId);
+      const loop = ()=>{
+        const open = measureMouthOpen();
+        drawAvatar(open);
+        rafId = requestAnimationFrame(loop);
+      };
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function stopAvatar(){
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      // draw idle face (closed mouth)
+      drawAvatar(0);
+      if(audioCtx){ try{audioCtx.close()}catch{} audioCtx=null; }
+      analyser = null; data=null;
+    }
+
+    function measureMouthOpen(){
+      if(!analyser || !data) return 0;
+      analyser.getByteTimeDomainData(data);
+      // Compute RMS energy around mid band
+      let sum = 0;
+      for(let i=0;i<data.length;i++){
+        const v = (data[i]-128)/128;
+        sum += v*v;
+      }
+      const rms = Math.sqrt(sum/data.length);
+      // Smooth opening to avoid jitter
+      const target = Math.min(1, Math.max(0, (rms - 0.03) * 16)); // tweak thresholds
+      const smooth = 0.15; // lower = slower
+      lastOpen = lastOpen + (target - lastOpen)*smooth;
+      return lastOpen;
+    }
+
+    function drawAvatar(open01){
+      // Clear + draw the portrait
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      if(avatarImg.complete) ctx.drawImage(avatarImg, 0, 0, canvas.width, canvas.height);
+
+      // Compute mouth rect in *canvas* coordinates
+      const scaleX = canvas.width / 1600;
+      const scaleY = canvas.height / 960;
+      const cx = MOUTH_X * scaleX;
+      const cy = MOUTH_Y * scaleY;
+      const w  = MOUTH_W * scaleX;
+      const h0 = MOUTH_H0 * scaleY;
+      const hMax = MOUTH_HMAX * scaleY;
+      const h  = h0 + (hMax - h0) * open01;
+
+      // Draw mouth as a shaded ellipse (simple but effective)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w*0.5, Math.max(2, h*0.5), 0, 0, Math.PI*2);
+      // inner shadow / gradient for depth
+      const grad = ctx.createRadialGradient(0,0,h*0.2, 0,0, w);
+      grad.addColorStop(0, '#2a0d10');
+      grad.addColorStop(1, '#000000');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Keep canvas crisp if you ever change CSS width
+    const ro = new ResizeObserver(()=>{
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.floor(rect.width * dpr);
+      const h = Math.floor(rect.width * dpr * (960/1600));
+      if(w && h && (canvas.width!==w || canvas.height!==h)){
+        canvas.width = w; canvas.height = h;
+        drawAvatar(0);
+      }
     });
-
-    // ---------- UI wiring ----------
-    startBtn.addEventListener('click', start);
-    hangupBtn.addEventListener('click', hangup);
-
-    // If you want to re-arm idle timer whenever user speaks locally:
-    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      src.connect(analyser);
-      const buf = new Uint8Array(analyser.frequencyBinCount);
-      (function loop(){
-        analyser.getByteTimeDomainData(buf);
-        let sum=0;
-        for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
-        const rms=Math.sqrt(sum/buf.length);
-        if (rms>0.03 && !ended){ armIdleTimeout(); } // reset timer when user talks
-        requestAnimationFrame(loop);
-      })();
-    }).catch(()=>{/* mic prompt deferred until Start */});
+    ro.observe(canvas);
   </script>
 </body>
 </html>
