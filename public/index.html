@@ -1,233 +1,253 @@
-<script>
-const $ = sel => document.querySelector(sel);
-const logBox = $('#log');
-const statusDot = $('#statusDot');
-const statusTxt  = $('#statusTxt');
-const startBtn  = $('#startBtn');
-const hangBtn   = $('#hangBtn');
-const testBtn   = $('#testBtn');
-const voiceSel  = $('#voiceSel');
-const remoteAudio = $('#remoteAudio');
-const portraitEl = $('#portrait');
-
-function log(s){ const at = new Date().toLocaleTimeString(); logBox.textContent += `[${at}] ${s}\n`; logBox.scrollTop = logBox.scrollHeight; }
-function setStatus(state){ statusDot.className = 'dot ' + state; statusTxt.textContent = state; }
-
-// ---------- Lip overlay UI ----------
-const uiBar = document.createElement('div');
-uiBar.className = 'row';
-uiBar.style.marginTop = '10px';
-uiBar.innerHTML = `
-  <div style="color:#9aa4b2;font-size:13px">Target width</div>
-  <input id="wSlider" type="range" min="60" max="520" value="260" style="width:180px">
-  <div style="color:#9aa4b2;font-size:13px;margin-left:10px">Scale</div>
-  <input id="sSlider" type="range" min="80" max="160" value="100" style="width:140px">
-`;
-portraitEl.parentElement.appendChild(uiBar);
-const widthSlider = $('#wSlider');
-const scaleSlider = $('#sSlider');
-
-// Create mouth overlay
-const mouth = document.createElement('img');
-mouth.alt = 'mouth';
-mouth.style.position = 'absolute';
-mouth.style.left = '50%';
-mouth.style.top =  '50%';
-mouth.style.transform = 'translate(-50%, -50%)';
-mouth.style.pointerEvents = 'auto';
-mouth.style.userSelect = 'none';
-mouth.style.mixBlendMode = 'normal';
-mouth.style.filter = 'none';
-mouth.style.display = 'none'; // hidden until frames load
-mouth.draggable = false;
-portraitEl.style.position = 'relative';
-portraitEl.appendChild(mouth);
-
-// anchor save/load
-const anchorKey = 'emma_mouth_anchor_v1';
-function saveAnchor(px, py){ localStorage.setItem(anchorKey, JSON.stringify({px,py})); log(`[anchor] saved x=${px.toFixed(3)}, y=${py.toFixed(3)}`); }
-function loadAnchor(){
-  try { return JSON.parse(localStorage.getItem(anchorKey)); } catch { return null; }
-}
-
-// click to anchor
-portraitEl.addEventListener('click', (e) => {
-  if (mouth.style.display === 'none') return;
-  const r = portraitEl.getBoundingClientRect();
-  const px = (e.clientX - r.left) / r.width;
-  const py = (e.clientY - r.top) / r.height;
-  placeMouth(px, py);
-  saveAnchor(px, py);
-});
-
-// place & size
-function placeMouth(px, py){
-  const r = portraitEl.getBoundingClientRect();
-  const target = parseInt(widthSlider.value, 10);
-  const scale = parseInt(scaleSlider.value, 10) / 100;
-  mouth.style.width = `${target}px`;
-  mouth.style.left = `${(px * r.width)|0}px`;
-  mouth.style.top  = `${(py * r.height)|0}px`;
-  mouth.style.transform = `translate(-50%, -50%) scale(${scale})`;
-}
-
-// ----- load frames -----
-const frameNames = ['f','p','g','i','l','o','u','v','say']; // filenames in /public/mouth/
-const frames = [];
-Promise.all(frameNames.map(n => new Promise(res=>{
-  const img = new Image();
-  img.onload = ()=>{ frames.push(img); res(); };
-  img.onerror = ()=>{ log(`[frames] failed to load /mouth/${n}.png`); res(); };
-  img.src = `/mouth/${n}.png`;
-}))).then(()=>{
-  if (frames.length){
-    mouth.style.display = 'block';
-    mouth.src = frames[0].src;
-    log(`[frames] loaded ${frames.length}/${frameNames.length}`);
-
-    // default anchor (center-ish)
-    const saved = loadAnchor() || { px: 0.50, py: 0.58 };
-    placeMouth(saved.px, saved.py);
-  } else {
-    log('[frames] no frames found (ensure /public/mouth/*.png exist and are lowercase)');
-  }
-});
-
-widthSlider.addEventListener('input', ()=>{
-  const saved = loadAnchor() || { px: 0.50, py: 0.58 };
-  placeMouth(saved.px, saved.py);
-});
-scaleSlider.addEventListener('input', ()=>{
-  const saved = loadAnchor() || { px: 0.50, py: 0.58 };
-  placeMouth(saved.px, saved.py);
-});
-
-// animate frames by energy
-let analyser = null, meterSrc = null;
-function startMouthAnimation(stream){
-  try{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    const src = ctx.createMediaStreamSource(stream);
-    const an = ctx.createAnalyser(); an.fftSize = 1024;
-    src.connect(analyser = an); meterSrc = src;
-
-    const buf = new Uint8Array(analyser.frequencyBinCount);
-    let idx = 0, lastSwap = 0;
-
-    function tick(now){
-      if (!analyser) return;
-      analyser.getByteFrequencyData(buf);
-      // crude energy: average of low bands
-      let sum = 0, n = 32; // first bins
-      for (let i=0;i<n;i++) sum += buf[i];
-      const energy = sum / (n*255); // 0..1
-
-      // pick frame: quiet -> closed, loud -> open
-      const band = Math.min(frames.length-1, Math.floor(energy * (frames.length)));
-      if (frames[band] && (now - lastSwap > 40)) {
-        mouth.src = frames[band].src;
-        lastSwap = now;
-      }
-      requestAnimationFrame(tick);
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EmotiKnow — Emma (Voice Companion)</title>
+  <style>
+    :root{
+      --bg:#0f1117; --panel:#151823; --ink:#e6e8ef; --muted:#9aa3b2; --accent:#68a5ff;
+      --ok:#22c55e; --err:#ef4444; --warn:#f59e0b;
     }
-    requestAnimationFrame(tick);
-  }catch(e){
-    log('[lip] analyser failed: ' + (e?.message||e));
-  }
-}
-function stopMouthAnimation(){
-  analyser = null;
-  if (meterSrc?.mediaStream) {
-    // stream will be stopped in hangup()
-  }
-}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans","Apple Color Emoji","Segoe UI Emoji";}
+    .wrap{max-width:1150px;margin:24px auto;padding:0 16px;}
+    h1{font-size:24px;margin:0 0 8px}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .col{display:flex;flex-direction:column;gap:10px}
+    .panel{background:var(--panel);border-radius:12px;padding:16px}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:6px;background:#666}
+    .dot.idle{background:#666}
+    .dot.connecting{background:var(--warn)}
+    .dot.connected{background:var(--ok)}
+    .dot.ended{background:#888}
+    button,select{background:#1b2232;border:1px solid #2d3650;color:var(--ink);padding:8px 12px;border-radius:8px}
+    button:hover{border-color:#3a4670}
+    .btn-danger{border-color:#4b2b2b;background:#2a1717}
+    input[type="range"]{accent-color:var(--accent)}
+    #stage{display:grid;grid-template-columns:1fr 380px;gap:16px}
+    @media (max-width:1100px){#stage{grid-template-columns:1fr}}
+    #portrait{position:relative;display:flex;align-items:center;justify-content:center;background:#0b0e16;border-radius:12px;overflow:hidden}
+    #portrait img{max-width:100%;height:auto;display:block}
+    #mouth{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:auto;user-select:none;display:none}
+    #log{height:360px;overflow:auto;white-space:pre-wrap;background:#0b0e16;border-radius:8px;padding:12px;border:1px solid #21273a}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between">
+      <h1>EmotiKnow — Emma (Voice Companion)</h1>
+      <div class="muted">
+        <span id="statusDot" class="dot idle"></span><span id="statusTxt">idle</span>
+      </div>
+    </div>
+    <div class="muted" style="margin:6px 0 16px">
+      Click <b>Start</b> once to allow your microphone. Talk naturally; Emma replies in real time. Her portrait lip-syncs to the audio.
+    </div>
 
-// ---------- Voice connection (unchanged) ----------
-let pc = null;
-let localStream = null;
+    <div id="stage">
+      <!-- LEFT: Portrait -->
+      <div class="panel col">
+        <div id="portrait" style="min-height:520px">
+          <!-- NOTE: image portrait only; there is NO <video> -->
+          <img id="portraitImg" src="/m.png" alt="portrait" />
+          <img id="mouth" alt="mouth" draggable="false" />
+        </div>
 
-function testSpeaker(){
-  try{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    const osc = ctx.createOscillator(); const g = ctx.createGain();
-    osc.frequency.value = 880; g.gain.value = 0.05;
-    osc.connect(g).connect(ctx.destination); osc.start();
-    setTimeout(()=>{ osc.stop(); ctx.close(); }, 220);
-    log('[speaker] test ping.');
-  }catch(e){ log('[speaker] test failed: '+(e?.message||e)); }
-}
-testBtn.addEventListener('click', testSpeaker);
+        <div class="row">
+          <div class="muted" style="font-size:13px">Target width</div>
+          <input id="wSlider" type="range" min="60" max="520" value="260" style="width:200px" />
+          <div class="muted" style="font-size:13px">Scale</div>
+          <input id="sSlider" type="range" min="80" max="160" value="100" style="width:160px" />
+        </div>
 
-function setConnectedState(connected){
-  setStatus(connected ? 'connected' : 'ended');
-}
+        <div class="row">
+          <button id="startBtn">Start</button>
+          <button id="hangBtn" class="btn-danger">Hang Up</button>
+          <select id="voiceSel">
+            <option value="shimmer">Shimmer (female, bright)</option>
+            <option value="ballad">Ballad (feminine, lyrical)</option>
+            <option value="verse">Verse (androgynous, calm)</option>
+          </select>
+          <button id="testBtn">Test speaker</button>
+          <span class="muted" style="font-size:12px">Tip: If you don’t hear Emma, click <b>Test speaker</b>, then click <b>Start</b> again (autoplay can be blocked).</span>
+        </div>
+      </div>
 
-async function startSession(){
-  if (pc) return;
-  setStatus('connecting');
-  log('[mic] requesting…');
+      <!-- RIGHT: Diagnostics -->
+      <div class="panel">
+        <div class="muted" style="margin-bottom:8px">Diagnostics</div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
 
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-    log('[mic] granted.');
-    // drive the mouth by mic energy (also reacts to your speech)
-    startMouthAnimation(localStream);
-  } catch (e) {
-    log('[mic] denied: ' + (e?.message || e));
-    setStatus('idle'); return;
-  }
+  <audio id="remoteAudio" autoplay></audio>
 
-  pc = new RTCPeerConnection();
-  // Send mic
-  localStream.getTracks().forEach(tr => pc.addTrack(tr, localStream));
-  // Receive remote audio
-  const remoteStream = new MediaStream();
-  pc.ontrack = e => {
-    e.streams[0].getAudioTracks().forEach(t => remoteStream.addTrack(t));
-    remoteAudio.srcObject = remoteStream;
-  };
+  <script>
+    const $ = s => document.querySelector(s);
+    const portrait = $('#portrait');
+    const portraitImg = $('#portraitImg');
+    const mouth = $('#mouth');
+    const wSlider = $('#wSlider');
+    const sSlider = $('#sSlider');
 
-  pc.onconnectionstatechange = () => {
-    log('[pc] state: ' + pc.connectionState);
-    if (pc.connectionState === 'connected') setConnectedState(true);
-    if (['failed','closed','disconnected'].includes(pc.connectionState)) setConnectedState(false);
-  };
+    const logBox = $('#log');
+    const statusDot = $('#statusDot');
+    const statusTxt = $('#statusTxt');
+    const startBtn = $('#startBtn');
+    const hangBtn = $('#hangBtn');
+    const testBtn = $('#testBtn');
+    const voiceSel = $('#voiceSel');
+    const remoteAudio = $('#remoteAudio');
 
-  const offer = await pc.createOffer({ offerToReceiveAudio:true });
-  await pc.setLocalDescription(offer);
-  log('[sdp] local offer created.');
+    function log(t){ const ts = new Date().toLocaleTimeString(); logBox.textContent += `[${ts}] ${t}\n`; logBox.scrollTop = logBox.scrollHeight; }
+    function setStatus(s){ statusDot.className = 'dot ' + s; statusTxt.textContent = s; }
 
-  const voice = voiceSel.value || 'shimmer';
-  log('[token] fetching…');
-  const tokenR = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}`);
-  if(!tokenR.ok){ log(`[token] error HTTP ${tokenR.status}`); throw new Error('token endpoint error'); }
-  await tokenR.json();
-  log('[token] ok.');
+    /* ---------------- Mouth frames ---------------- */
+    const frameNames = ['f','p','g','i','l','o','u','v','say']; // /public/mouth/*.png
+    const frames = [];
+    Promise.all(frameNames.map(n => new Promise(res=>{
+      const img = new Image();
+      img.onload = ()=>{ frames.push(img); res(); };
+      img.onerror = ()=>{ log(`[frames] failed to load /mouth/${n}.png`); res(); };
+      img.src = `/mouth/${n}.png`;
+    }))).then(()=>{
+      if (frames.length){
+        mouth.style.display = 'block';
+        mouth.src = frames[0].src;
+        log(`[frames] loaded ${frames.length}/${frameNames.length}`);
+        // place at default anchor
+        const saved = loadAnchor() || { px:0.50, py:0.58 };
+        placeMouth(saved.px, saved.py);
+      }else{
+        log('[frames] no frames found (make sure they are lowercase in /public/mouth)');
+      }
+    });
 
-  log('[sdp] exchanging via /api/realtime-session (POST)…');
-  const post = await fetch('/api/realtime-session', {
-    method: 'POST',
-    headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify({ sdp: offer.sdp, voice })
-  });
-  if(!post.ok){
-    const t = await post.text().catch(()=> '');
-    log(`[sdp] server POST failed: ${post.status} ${t}`);
-    throw new Error('SDP exchange failed.');
-  }
-  const { answer } = await post.json();
-  await pc.setRemoteDescription({ type:'answer', sdp: answer });
-  log('[sdp] answer set. WebRTC completing…');
-}
+    const anchorKey = 'emma_anchor_v1';
+    function saveAnchor(px,py){ localStorage.setItem(anchorKey, JSON.stringify({px,py})); log(`[anchor] saved x=${px.toFixed(3)}, y=${py.toFixed(3)}`); }
+    function loadAnchor(){ try{ return JSON.parse(localStorage.getItem(anchorKey)); }catch{ return null; } }
 
-async function hangup(){
-  stopMouthAnimation();
-  if (pc) { try{ pc.close(); }catch{} pc = null; }
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-  setStatus('ended');
-  log('[call] ended.');
-}
+    function placeMouth(px,py){
+      const r = portrait.getBoundingClientRect();
+      const target = parseInt(wSlider.value, 10);
+      const sc = parseInt(sSlider.value, 10)/100;
+      mouth.style.width = `${target}px`;
+      mouth.style.left = `${(px*r.width)|0}px`;
+      mouth.style.top  = `${(py*r.height)|0}px`;
+      mouth.style.transform = `translate(-50%, -50%) scale(${sc})`;
+    }
 
-startBtn.addEventListener('click', () => startSession().catch(e=>{ log('[error] '+(e?.message||e)); setStatus('ended'); }));
-hangBtn.addEventListener('click', hangup);
-</script>
+    portrait.addEventListener('click',(e)=>{
+      if (mouth.style.display==='none') return;
+      const r = portrait.getBoundingClientRect();
+      const px = (e.clientX - r.left)/r.width;
+      const py = (e.clientY - r.top)/r.height;
+      placeMouth(px,py);
+      saveAnchor(px,py);
+    });
+    wSlider.addEventListener('input', ()=>{ const a = loadAnchor()||{px:0.50,py:0.58}; placeMouth(a.px,a.py); });
+    sSlider.addEventListener('input', ()=>{ const a = loadAnchor()||{px:0.50,py:0.58}; placeMouth(a.px,a.py); });
+
+    /* -------------- Lip animation (energy) --------- */
+    let analyser=null;
+    function startLipAnimation(stream){
+      try{
+        const ctx = new (window.AudioContext||window.webkitAudioContext)();
+        const src = ctx.createMediaStreamSource(stream);
+        const an = ctx.createAnalyser(); an.fftSize=1024;
+        src.connect(an); analyser = an;
+
+        const buf = new Uint8Array(analyser.frequencyBinCount);
+        let last=0;
+        function tick(t){
+          if (!analyser) return;
+          analyser.getByteFrequencyData(buf);
+          let sum=0, n=32; for(let i=0;i<n;i++) sum+=buf[i];
+          const energy = sum/(n*255);               // 0..1
+          const band = Math.min(frames.length-1, Math.floor(energy*frames.length));
+          if (frames[band] && t-last>40){ mouth.src = frames[band].src; last=t; }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      }catch(e){ log('[lip] analyser failed: '+(e?.message||e)); }
+    }
+    function stopLipAnimation(){ analyser=null; }
+
+    /* ---------------- WebRTC voice ------------------ */
+    let pc=null, localStream=null;
+
+    testBtn.addEventListener('click', ()=>{
+      try{
+        const ctx = new (window.AudioContext||window.webkitAudioContext)();
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.frequency.value = 880; g.gain.value=0.05;
+        o.connect(g).connect(ctx.destination); o.start();
+        setTimeout(()=>{ o.stop(); ctx.close(); }, 200);
+        log('[speaker] test ping.');
+      }catch(e){ log('[speaker] test failed: '+(e?.message||e)); }
+    });
+
+    startBtn.addEventListener('click', async ()=>{
+      if (pc) return;
+      setStatus('connecting');
+      log('[mic] requesting…');
+
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        log('[mic] granted.');
+        startLipAnimation(localStream);
+      }catch(e){
+        log('[mic] denied: '+(e?.message||e));
+        setStatus('idle'); return;
+      }
+
+      pc = new RTCPeerConnection();
+      localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+      const remoteStream = new MediaStream();
+      pc.ontrack = ev => {
+        ev.streams[0].getAudioTracks().forEach(t=>remoteStream.addTrack(t));
+        remoteAudio.srcObject = remoteStream;
+      };
+
+      pc.onconnectionstatechange = ()=>{
+        log('[pc] state: '+pc.connectionState);
+        if (pc.connectionState==='connected') setStatus('connected');
+        if (['disconnected','failed','closed'].includes(pc.connectionState)) setStatus('ended');
+      };
+
+      const offer = await pc.createOffer({ offerToReceiveAudio:true });
+      await pc.setLocalDescription(offer);
+      log('[sdp] local offer created.');
+
+      const voice = voiceSel.value || 'shimmer';
+      log('[token] fetching…');
+      const tk = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}`);
+      if (!tk.ok){ log(`[token] error HTTP ${tk.status}`); setStatus('ended'); return; }
+      await tk.json();
+      log('[token] ok.');
+
+      log('[sdp] exchanging via /api/realtime-session (POST)…');
+      const post = await fetch('/api/realtime-session', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ sdp: offer.sdp, voice })
+      });
+      if (!post.ok){
+        const t = await post.text().catch(()=> ''); log(`[sdp] POST failed: ${post.status} ${t}`);
+        setStatus('ended'); return;
+      }
+      const { answer } = await post.json();
+      await pc.setRemoteDescription({ type:'answer', sdp: answer });
+      log('[sdp] answer set. WebRTC completing…');
+    });
+
+    hangBtn.addEventListener('click', ()=>{
+      stopLipAnimation();
+      if (pc){ try{pc.close();}catch{} pc=null; }
+      if (localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+      setStatus('ended'); log('[call] ended. (user)');
+    });
+  </script>
+</body>
+</html>
