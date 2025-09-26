@@ -59,6 +59,16 @@
   </style>
 </head>
 <body>
+  <body>
+  <script>
+    // Remove any stray <video> elements that might be left by an old cached build
+    (function killStrayVideos() {
+      const kill = () => document.querySelectorAll('video').forEach(v => v.remove());
+      kill();
+      setTimeout(kill, 150); // in case something mounts late
+    })();
+  </script>
+  <!-- the rest of your page follows -->
   <div class="wrap">
     <h1>EmotiKnow — Emma (Voice Companion)</h1>
     <div class="row">
