@@ -2,267 +2,314 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EmotiKnow — Emma (Voice Companion)</title>
   <style>
-    :root {
-      --bg: #0f1117; --ink: #e6e8ef; --muted:#9aa3b2; --panel:#151b23; --accent:#8ab4ff;
+    :root{
+      --bg:#0f1117; --panel:#151b23; --ink:#e6e8ef; --muted:#9aa3b2; --accent:#8ab4ff;
+      --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
     }
-    * { box-sizing: border-box; }
+    *,*::before,*::after{box-sizing:border-box}
     html,body{height:100%}
     body{
-      margin:0; color:var(--ink); background:var(--bg);
-      font: 500 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans;
-      display:grid; place-items:center;
+      margin:0; background:var(--bg); color:var(--ink);
+      font:500 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Apple Color Emoji, Segoe UI Emoji;
+      display:grid; place-items:start center; padding:24px;
     }
-    .card{
-      width:min(1200px, 96vw); margin:24px; padding:20px; background:var(--panel);
-      border:1px solid #202937; border-radius:14px;
+    .wrap{width:min(1200px,100%); display:grid; gap:18px}
+    h1{font-weight:800; letter-spacing:.2px; margin:0}
+    .row{display:grid; gap:16px; grid-template-columns: 1.2fr .9fr}
+    @media (max-width:980px){ .row{grid-template-columns:1fr} }
+    .panel{
+      background:var(--panel); border:1px solid #202937; border-radius:14px; padding:16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
     }
-    h1{margin:0 0 12px; font-weight:800; letter-spacing:.2px}
-    .row{display:grid; grid-template-columns: 1.2fr .8fr; gap:18px}
-    @media (max-width: 980px){ .row{grid-template-columns:1fr} }
-    .stage{ aspect-ratio: 16/10; background:#0b0e13; display:grid; place-items:center; border-radius:10px; overflow:hidden; }
-    .portrait-wrap{position:relative; width:100%; height:100%}
-    .portrait{position:absolute; inset:0; width:100%; height:100%; object-fit:contain;}
-    /* Mouth overlay (image that we scale/position); hidden by default until assets load */
-    #mouth { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      display:none; width:200px; image-rendering:auto; }
-    .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .btn{ padding:10px 14px; border-radius:10px; background:#2a323d; color:var(--ink);
-      border:1px solid #374151; cursor:pointer; }
-    .btn.primary{ background:#3b82f6; border-color:#3b82f6; }
-    .btn:disabled{ opacity:.5; cursor:not-allowed }
-    .select, .slider{ background:#0e1218; color:var(--ink); border:1px solid #303843;
-      border-radius:10px; padding:8px 10px; }
-    .diag { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      background:#0e1218; border:1px solid #303843; border-radius:10px; padding:10px; height:340px; overflow:auto }
-    label{ font-size:12px; color:var(--muted) }
+    .stage{
+      aspect-ratio: 16 / 10; /* room for portrait and overlays */
+      background:#0b0e13; position:relative; overflow:hidden; display:grid; place-items:center;
+    }
+    /* portrait image (NOT a video) */
+    #portrait{
+      max-width:100%; max-height:100%; object-fit:contain; display:block;
+      filter:none;
+      user-select:none; -webkit-user-drag:none;
+    }
+    /* lips overlay (hidden until first anchor) */
+    #mouth{
+      position:absolute; inset:auto auto auto auto; /* we set with left/top JS */
+      width:260px; transform:translate(-50%,-50%) scale(1);
+      display:none; /* becomes block after first anchor */
+      pointer-events:none; image-rendering:auto;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
+    }
+
+    /* controls */
+    .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .controls .spacer{flex:1}
+    .btn{
+      appearance:none; border:1px solid #2b3342; background:#182031; color:#cfd6e6;
+      padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer;
+    }
+    .btn.primary{ background:#3052ff; border-color:#3052ff; color:white }
+    .btn.warn{ background:#3a2a15; border-color:#a06911; color:#ffd183 }
+    .btn:disabled{ opacity:.55; cursor:not-allowed }
+    .slider{ display:flex; gap:8px; align-items:center }
+    input[type="range"]{ width:160px }
+
+    /* diagnostics */
+    .term{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:13px; line-height:1.5; color:#c8d1e8; height:100%;
+      background:#0b0f16; border:1px solid #1e2632; border-radius:10px; padding:12px; overflow:auto;
+      white-space:pre-wrap;
+    }
+
+    /* IMPORTANT: never show any <video> on this page */
+    video{ display:none !important; }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="wrap">
     <h1>EmotiKnow — Emma (Voice Companion)</h1>
-    <p>Click <b>Start</b> once to allow your mic. Talk naturally; Emma replies in real time.</p>
     <div class="row">
-      <div class="stage">
-        <div class="portrait-wrap" id="stage">
-          <img id="portrait" class="portrait" src="/m.png" alt="portrait" />
-          <img id="mouth" alt="mouth" />
-          <!-- Remote audio only (no video overlay). -->
+      <div class="panel">
+        <div class="stage" id="stage">
+          <!-- Your still portrait -->
+          <img id="portrait" src="/m.png?v=4" alt="portrait" draggable="false" />
+
+          <!-- Mouth overlay (starts hidden) -->
+          <img id="mouth" alt="mouth rig" />
+
+          <!-- single audio element for the remote WebRTC stream -->
           <audio id="remoteAudio" autoplay playsinline></audio>
         </div>
-      </div>
 
-      <div>
-        <div class="controls" style="margin-bottom:10px">
+        <div class="controls" style="margin-top:12px">
           <button id="startBtn" class="btn primary">Start</button>
           <button id="hangBtn" class="btn">Hang Up</button>
-          <button id="testBtn" class="btn">Test speaker</button>
+          <div class="spacer"></div>
 
-          <select id="voiceSel" class="select">
-            <option value="shimmer" selected>Shimmer (female)</option>
-            <option value="verse">Verse (male)</option>
-            <option value="alloy">Alloy (neutral)</option>
-          </select>
+          <div class="slider">
+            <label for="widthRange">Target width</label>
+            <input id="widthRange" type="range" min="80" max="700" value="260" />
+            <span id="widthOut">260 px</span>
+          </div>
 
-          <label>Target width</label>
-          <input id="widthSlider" class="slider" type="range" min="60" max="600" value="260" />
-          <label>Scale</label>
-          <input id="scaleSlider" class="slider" type="range" min="50" max="200" value="100" />
+          <div class="slider">
+            <label for="scaleRange">Scale</label>
+            <input id="scaleRange" type="range" min="70" max="160" value="100" />
+            <span id="scaleOut">100 %</span>
+          </div>
         </div>
 
-        <div class="diag" id="log"></div>
+        <p style="margin:.6rem 0 0;color:var(--muted)">
+          Tip: Click Emma’s mouth once to re-anchor the lips. Use the sliders to size &amp; scale.  
+          The anchor is saved per browser.
+        </p>
+      </div>
+
+      <div class="panel" style="display:grid; grid-template-rows:auto 1fr; gap:8px; min-height:420px">
+        <div style="display:flex; align-items:center; gap:8px">
+          <strong>Diagnostics</strong>
+          <span id="status" style="margin-left:auto; color:#9ad5ac">idle</span>
+        </div>
+        <div class="term" id="log"></div>
       </div>
     </div>
-
-    <p style="margin-top:10px">
-      Tip: click Emma’s mouth to re-anchor the lips; use the sliders to size & scale. The anchor is saved per browser.
-    </p>
   </div>
 
-<script>
-const logEl = document.getElementById("log");
-function log(line){ logEl.textContent += line + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+  <script>
+  ;(() => {
+    const portrait = document.getElementById('portrait');
+    const mouth    = document.getElementById('mouth');
+    const stage    = document.getElementById('stage');
+    const remoteAudio = document.getElementById('remoteAudio');
 
-const startBtn = document.getElementById("startBtn");
-const hangBtn  = document.getElementById("hangBtn");
-const testBtn  = document.getElementById("testBtn");
-const voiceSel = document.getElementById("voiceSel");
+    const startBtn = document.getElementById('startBtn');
+    const hangBtn  = document.getElementById('hangBtn');
+    const widthRange = document.getElementById('widthRange');
+    const widthOut   = document.getElementById('widthOut');
+    const scaleRange = document.getElementById('scaleRange');
+    const scaleOut   = document.getElementById('scaleOut');
+    const logEl   = document.getElementById('log');
+    const statusEl= document.getElementById('status');
 
-const remoteAudio = document.getElementById("remoteAudio");
-const portrait    = document.getElementById("portrait");
-const mouthImg    = document.getElementById("mouth");
-const widthSlider = document.getElementById("widthSlider");
-const scaleSlider = document.getElementById("scaleSlider");
-const stage       = document.getElementById("stage");
+    // 1) DIAGNOSTICS
+    function log(s){ logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+    function setStatus(s){ statusEl.textContent = s; }
 
-let pc = null;
-let localStream = null;
-let mouthFrames = {};
-let mouthAnchor = JSON.parse(localStorage.getItem("emma-mouth-anchor")||"null"); // {normX,normY}
-let raf = 0;
+    // 2) MOUTH FRAMES
+    const frameNames = ['f','p','g','i','l','o','say','u','m']; // order you prefer
+    const mouthImgs = {};
+    let framesReady = false;
 
-// ———————————————————————————
-// Load mouth frames if present (/public/mouth/*.png). Optional.
-const frameNames = ["f","p","g","i","l","o","u","v","say"];
-async function tryLoadMouthFrames(){
-  try{
-    const checks = await Promise.allSettled(
-      frameNames.map(n => fetch(`/mouth/${n}.png`, {method:"HEAD"}))
-    );
-    const ok = checks.every(r => r.status==="fulfilled" && r.value.ok);
-    if(!ok){ log("[frames] no /mouth/*.png found (optional)"); return; }
-
-    for(const n of frameNames){
-      const img = new Image();
-      img.src = `/mouth/${n}.png`;
-      await img.decode().catch(()=>{});
-      mouthFrames[n] = img;
+    function loadFrames(version='4'){
+      let loaded = 0;
+      frameNames.forEach(name => {
+        const img = new Image();
+        img.onload = () => {
+          loaded++;
+          if (loaded === frameNames.length){ framesReady = true; log(`[frames] loaded ${loaded}/${frameNames.length}`); }
+        };
+        img.onerror = () => log(`[frames] ERROR loading /mouth/${name}.png`);
+        // cache-bust to avoid stale 404s
+        img.src = `/mouth/${name}.png?v=${version}`;
+        mouthImgs[name] = img;
+      });
     }
-    mouthImg.style.display = "block";
-    log("[frames] loaded " + Object.keys(mouthFrames).length + "/9");
-  }catch(e){ log("[frames] load error: "+e); }
-}
-tryLoadMouthFrames();
+    loadFrames();
 
-// Clicking the portrait sets/updates the mouth anchor.
-stage.addEventListener("click", (ev)=>{
-  const r = stage.getBoundingClientRect();
-  const nx = (ev.clientX - r.left) / r.width;
-  const ny = (ev.clientY - r.top)  / r.height;
-  mouthAnchor = {normX: nx, normY: ny};
-  localStorage.setItem("emma-mouth-anchor", JSON.stringify(mouthAnchor));
-  log(`[anchor] saved x=${nx.toFixed(3)}, y=${ny.toFixed(3)}`);
-  renderMouth();
-});
+    // 3) MOUTH STATE
+    let mouthX = 0.5;   // normalized (0..1), updated on click
+    let mouthY = 0.57;
+    let targetWidthPx = parseInt(widthRange.value, 10);
+    let scaleFactor   = parseInt(scaleRange.value, 10)/100;
 
-// Size/scale controls
-widthSlider.addEventListener("input", renderMouth);
-scaleSlider.addEventListener("input", renderMouth);
+    // Restore anchor from localStorage
+    try{
+      const saved = JSON.parse(localStorage.getItem('emma-mouth-anchor') || 'null');
+      if (saved && typeof saved.x === 'number' && typeof saved.y === 'number'){
+        mouthX = saved.x; mouthY = saved.y;
+        log(`[anchor] restored x=${mouthX.toFixed(3)}, y=${mouthY.toFixed(3)}`);
+      }
+    }catch{}
 
-function renderMouth(){
-  if(!mouthAnchor || !mouthImg.src) return;
-  const w = parseInt(widthSlider.value,10);
-  const scale = parseInt(scaleSlider.value,10) / 100;
-
-  // Place by normalized anchor
-  const rect = stage.getBoundingClientRect();
-  const x = mouthAnchor.normX * rect.width;
-  const y = mouthAnchor.normY * rect.height;
-
-  // Apply
-  mouthImg.style.width = `${w}px`;
-  mouthImg.style.left  = `${x}px`;
-  mouthImg.style.top   = `${y}px`;
-  mouthImg.style.transform = `translate(-50%,-50%) scale(${scale})`;
-}
-
-// Pick a simple frame by measuring mic loudness (VU)
-let analyser, dataArray;
-function animateMouth() {
-  if(!analyser || !mouthAnchor || !Object.keys(mouthFrames).length){ raf = requestAnimationFrame(animateMouth); return; }
-  analyser.getByteTimeDomainData(dataArray);
-  // Rough VU from waveform deviation
-  let sum = 0;
-  for (let i=0; i<dataArray.length; i++) {
-    const v = (dataArray[i]-128)/128;
-    sum += v*v;
-  }
-  const rms = Math.sqrt(sum/dataArray.length); // 0..~0.3
-  let frame = "say";
-  if(rms > 0.06) frame = "o";
-  if(rms > 0.10) frame = "a";
-  if(!mouthFrames[frame]) frame = "say";
-  mouthImg.src = mouthFrames[frame].src;
-  raf = requestAnimationFrame(animateMouth);
-}
-
-// ———————————————————————————
-// WebRTC wiring with your fixed API route
-async function startCall(){
-  stopCall();
-
-  const model = "gpt-4o-mini-realtime-preview";
-  const voice = voiceSel.value;
-
-  // mic
-  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  // analyser for mouth VU
-  try{
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const src = ac.createMediaStreamSource(localStream);
-    analyser = ac.createAnalyser();
-    analyser.fftSize = 1024;
-    dataArray = new Uint8Array(analyser.fftSize);
-    src.connect(analyser);
-    cancelAnimationFrame(raf); raf = requestAnimationFrame(animateMouth);
-  }catch(e){ /* non-fatal */ }
-
-  pc = new RTCPeerConnection({ iceServers: [{urls: "stun:stun.l.google.com:19302"}] });
-
-  // Outgoing mic track
-  for (const track of localStream.getTracks()) pc.addTrack(track, localStream);
-
-  // Incoming audio track
-  pc.ontrack = (e) => {
-    if (e.track.kind === "audio") {
-      remoteAudio.srcObject = e.streams[0];
+    function updateMouthPosition(frame = 'm'){
+      if (!framesReady || !mouthImgs[frame]) return;
+      // Convert normalized x/y into stage pixel coords
+      const rect = stage.getBoundingClientRect();
+      const xPx = rect.left + rect.width  * mouthX;
+      const yPx = rect.top  + rect.height * mouthY;
+      // Apply
+      mouth.src = mouthImgs[frame].src;
+      mouth.style.display = 'block';
+      mouth.style.width   = `${targetWidthPx}px`;
+      mouth.style.left    = `${xPx}px`;
+      mouth.style.top     = `${yPx}px`;
+      mouth.style.transform = `translate(-50%,-50%) scale(${scaleFactor})`;
     }
-  };
 
-  pc.oniceconnectionstatechange = () => log(`[pc] state: ${pc.iceConnectionState}`);
+    // Re-anchor on mouth click
+    stage.addEventListener('click', (ev) => {
+      // map click into normalized coordinates relative to the portrait area (stage)
+      const rect = stage.getBoundingClientRect();
+      mouthX = (ev.clientX - rect.left) / rect.width;
+      mouthY = (ev.clientY - rect.top)  / rect.height;
+      localStorage.setItem('emma-mouth-anchor', JSON.stringify({x:mouthX, y:mouthY}));
+      log(`[anchor] saved x=${mouthX.toFixed(3)}, y=${mouthY.toFixed(3)}`);
+      updateMouthPosition('m');
+    });
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    // Sliders
+    widthRange.addEventListener('input', () => {
+      targetWidthPx = parseInt(widthRange.value,10);
+      widthOut.textContent = `${targetWidthPx} px`;
+      updateMouthPosition('m');
+    });
+    scaleRange.addEventListener('input', () => {
+      scaleFactor = parseInt(scaleRange.value,10)/100;
+      scaleOut.textContent = `${parseInt(scaleRange.value,10)} %`;
+      updateMouthPosition('m');
+    });
+    widthOut.textContent = `${targetWidthPx} px`;
+    scaleOut.textContent = `${parseInt(scaleRange.value,10)} %`;
 
-  log("[token] fetching…");
+    // 4) REALTIME (audio-only) — no <video> used anywhere
+    let pc = null;
+    let stopFn = null;
 
-  const resp = await fetch(`/api/realtime-session?model=${encodeURIComponent(model)}&voice=${encodeURIComponent(voice)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/sdp" },
-    body: offer.sdp,
-  });
+    async function startCall(){
+      try{
+        setStatus('starting…');
+        log('[mic] requesting…');
+        const mic = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+        log('[mic] granted.');
 
-  const answerSdp = await resp.text();
-  if (!resp.ok || !answerSdp.includes("\nv=")) {
-    log("[ERROR] token/sdp failed:");
-    log(answerSdp);
-    stopCall();
-    return;
-  }
-  log("[token] ok. Applying SDP answer…");
-  await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+        // Create peer connection
+        pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
 
-  // basic chatty system prompt
-  // (Optional: You can push a “response.create” event via data channel; keeping minimal here)
-}
+        // remote audio
+        pc.ontrack = (ev) => {
+          if (ev.track.kind === 'audio'){
+            remoteAudio.srcObject = ev.streams[0];
+          }
+        };
 
-function stopCall(){
-  if (pc) { pc.close(); pc = null; }
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-}
+        // send mic
+        mic.getTracks().forEach(t => pc.addTrack(t, mic));
 
-startBtn.onclick = () => startCall();
-hangBtn.onclick  = () => stopCall();
-testBtn.onclick  = async () => {
-  // A tiny speaker ping to unlock autoplay
-  const ac = new (window.AudioContext || window.webkitAudioContext)();
-  const osc = ac.createOscillator(); const gain = ac.createGain();
-  gain.gain.value = 0.05; osc.frequency.value = 800;
-  osc.connect(gain).connect(ac.destination);
-  osc.start(); setTimeout(()=>{ osc.stop(); ac.close(); }, 120);
-  log("[speaker] test ping.");
-};
+        // *** audio only ***
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        // Do NOT add a video transceiver. We don't want any remote <video>.
 
-// Initialize mouth anchor with a sensible middle-bottom default if none
-window.addEventListener("load", () => {
-  if(!mouthAnchor) {
-    mouthAnchor = {normX: 0.50, normY: 0.58};
-    localStorage.setItem("emma-mouth-anchor", JSON.stringify(mouthAnchor));
-  }
-  renderMouth();
-});
-</script>
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // get a client token from your server
+        log('[token] fetching…');
+        const tokenRes = await fetch('/api/realtime-session?voice=shimmer', { method:'POST' });
+        const { client_secret } = await tokenRes.json();
+        log('[token] ok.');
+
+        // ask the OpenAI Realtime endpoint to answer our SDP
+        log('[sdp] exchanging via /api/realtime-session (POST)…');
+        const baseUrl = 'https://api.openai.com/v1/realtime';
+        const model   = 'gpt-4o-mini-realtime-preview'; // your model
+        const resp = await fetch(`${baseUrl}?model=${encodeURIComponent(model)}`, {
+          method:'POST',
+          headers:{
+            'Authorization': `Bearer ${client_secret.value}`,
+            'Content-Type': 'application/sdp'
+          },
+          body: offer.sdp
+        });
+        const answerSdp = await resp.text();
+
+        await pc.setRemoteDescription({ type:'answer', sdp:answerSdp });
+        setStatus('live');
+        log('[pc] state: connected');
+
+        // light animation of mouth frames (just to prove it swaps);
+        // in a real lipsync you’d drive this from phonemes/VU.
+        let i = 0;
+        const loop = setInterval(() => {
+          if (!pc || pc.connectionState === 'closed'){ clearInterval(loop); return; }
+          const fr = frameNames[i % frameNames.length];
+          updateMouthPosition(fr);
+          i++;
+        }, 280);
+
+        stopFn = () => {
+          clearInterval(loop);
+          setStatus('ended');
+          log('[call] ended. (user)');
+          if (pc && pc.connectionState !== 'closed'){ pc.close(); }
+          pc = null;
+          mic.getTracks().forEach(t => t.stop());
+        };
+
+      }catch(err){
+        setStatus('error');
+        log('[ERROR] ' + (err?.message || err));
+      }
+    }
+
+    function hangUp(){
+      if (stopFn){ stopFn(); stopFn = null; }
+    }
+
+    startBtn.addEventListener('click', startCall);
+    hangBtn.addEventListener('click', hangUp);
+
+    // 5) Warm, kind persona (server side)
+    // We can also ask the server to give warmer instructions via session.
+    // Make sure your /api/realtime-session adds something like:
+    //   instructions: "You are Emma, a warm, kind, caring voice companion. Be concise, positive, and supportive. Use a friendly tone and short sentences."
+    // (See note below)
+
+    // First paint: put the mouth somewhere sensible
+    updateMouthPosition('m');
+  })();
+  </script>
 </body>
 </html>
