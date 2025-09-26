@@ -1,92 +1,82 @@
-// api/realtime-session.js
-// Vercel: Serverless (Node) function for OpenAI Realtime ephemeral session tokens
+// /api/realtime-session.js
+export const config = { runtime: 'edge' };
 
-export default async function handler(req, res) {
-  // ---- CORS (adjust when you put this on your prod domain) ----
-  const allowOrigin = process.env.CORS_ORIGIN || "*";
-  res.setHeader("Access-Control-Allow-Origin", allowOrigin);
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, OpenAI-Beta");
+/**
+ * Supports:
+ *  - GET  => create ephemeral client_secret (same as you have now)
+ *  - POST => exchange SDP offer with OpenAI, return { answer }
+ *
+ * ENV required on Vercel:
+ *  - OPENAI_API_KEY
+ *
+ * Query/body:
+ *  - voice: shimmer | ballad | verse ...
+ */
+export default async function handler(req) {
+  const { method } = req;
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+  if (method === 'GET') {
+    const { searchParams } = new URL(req.url);
+    const voice = searchParams.get('voice') || 'shimmer';
+    const model = searchParams.get('model') || 'gpt-4o-mini-realtime-preview';
 
-  // ---- Safety: API key required ----
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: "OPENAI_API_KEY is not set on the server" });
-  }
-
-  try {
-    // ---- Read and clamp requested voice ----
-    const url = new URL(req.url, `https://${req.headers.host}`);
-    const requested = (url.searchParams.get("voice") || "").toLowerCase();
-
-    const SUPPORTED_VOICES = [
-      "alloy", "ash", "ballad", "coral", "echo",
-      "sage", "shimmer", "verse", "marin", "cedar"
-    ];
-    const voice = SUPPORTED_VOICES.includes(requested) ? requested : "shimmer";
-
-    // ---- Model + behavior settings ----
-    // NOTE: Some fields (like "max_minutes") are *not* accepted by the Realtime endpoint,
-    // so we keep that as a *client-side timer* only.
-    const body = {
-      model: "gpt-4o-mini-realtime-preview",
-      voice,
-      // Make Emma warm, supportive, and a touch more talkative
-      instructions: `You are Emma, EmotiKnow’s warm, kind, and supportive voice companion.
-Speak gently and with care, like a thoughtful friend or counselor.
-Be encouraging, curious, and present. 
-Use complete sentences and a calm pace. 
-If the user pauses or seems unsure, softly invite them to continue.
-Keep responses concise by default, but expand when asked for detail.`,
-
-      // Keep hands-free: server side Voice Activity Detection
-      turn_detection: {
-        type: "server_vad",
-        // Slightly less sensitive so small background noises don't interrupt
-        threshold: 0.60,
-        // A small buffer before model begins speaking (helps reduce cut-offs)
-        prefix_padding_ms: 500,
-        // Wait longer before deciding the user has finished
-        silence_duration_ms: 2500
-      }
-    };
-
-    // ---- Create an ephemeral Realtime session token ----
-    const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
-      method: "POST",
+    const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "realtime=v1"
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'realtime=v1'
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ model, voice })
     });
 
     if (!r.ok) {
-      const text = await r.text().catch(() => "");
-      return res.status(500).json({
-        error: "Failed to create session",
-        status: r.status,
-        body: text
-      });
+      const t = await r.text().catch(() => '');
+      return new Response(
+        JSON.stringify({ error: 'session_create_failed', status: r.status, body: t }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
-    const data = await r.json();
+    const j = await r.json();
+    return new Response(JSON.stringify(j), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
 
-    // Return only what the client needs
-    return res.status(200).json({
-      id: data.id,
-      client_secret: data.client_secret,  // { value, expires_at }
-      model: body.model,
-      voice
+  if (method === 'POST') {
+    // Body: { sdp: string, voice?: string, model?: string }
+    const body = await req.json().catch(() => null);
+    if (!body?.sdp) {
+      return new Response(JSON.stringify({ error: 'missing_sdp' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    const voice = body.voice || 'shimmer';
+    const model = body.model || 'gpt-4o-mini-realtime-preview';
+
+    // Forward the SDP offer to OpenAI Realtime REST; get back SDP answer
+    const upstream = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}&voice=${encodeURIComponent(voice)}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/sdp',
+        'OpenAI-Beta': 'realtime=v1'
+      },
+      body: body.sdp
     });
-  } catch (err) {
-    return res.status(500).json({
-      error: "Server error creating session",
-      message: err?.message || String(err)
+
+    if (!upstream.ok) {
+      const t = await upstream.text().catch(() => '');
+      return new Response(
+        JSON.stringify({ error: 'sdp_exchange_failed', status: upstream.status, body: t }),
+        { status: 502, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const answer = await upstream.text();
+    return new Response(JSON.stringify({ answer }), {
+      status: 200, headers: { 'Content-Type': 'application/json' }
     });
   }
+
+  return new Response('Method Not Allowed', { status: 405 });
 }
