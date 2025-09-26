@@ -16,31 +16,40 @@ export default async function handler(req) {
   const { method } = req;
 
   if (method === 'GET') {
-    const { searchParams } = new URL(req.url);
-    const voice = searchParams.get('voice') || 'shimmer';
-    const model = searchParams.get('model') || 'gpt-4o-mini-realtime-preview';
+  const { searchParams } = new URL(req.url);
+  const voice = searchParams.get('voice') || 'shimmer';
+  const model = searchParams.get('model') || 'gpt-4o-mini-realtime-preview';
 
-    const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'realtime=v1'
-      },
-      body: JSON.stringify({ model, voice })
-    });
+  // You can make this text even more “you” later.
+  const instructions =
+    `You are Emma, a caring, upbeat voice companion. 
+     Speak in warm, natural, short sentences (8–14 words).
+     Be encouraging and emotionally intelligent. 
+     Ask one gentle follow-up at a time, then pause to listen.
+     Keep a friendly smile in your voice. 
+     Avoid controversy; be helpful and kind.`;
 
-    if (!r.ok) {
-      const t = await r.text().catch(() => '');
-      return new Response(
-        JSON.stringify({ error: 'session_create_failed', status: r.status, body: t }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
+  const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+      'OpenAI-Beta': 'realtime=v1'
+    },
+    body: JSON.stringify({ model, voice, instructions })
+  });
 
-    const j = await r.json();
-    return new Response(JSON.stringify(j), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    return new Response(
+      JSON.stringify({ error: 'session_create_failed', status: r.status, body: t }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
+
+  const j = await r.json();
+  return new Response(JSON.stringify(j), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
 
   if (method === 'POST') {
     // Body: { sdp: string, voice?: string, model?: string }
