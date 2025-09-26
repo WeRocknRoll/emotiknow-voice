@@ -1,327 +1,78 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>EmotiKnow — Emma (Voice Companion)</title>
-<style>
-  :root {
-    --bg:#0b0f14; --panel:#121822; --text:#e7edf5; --muted:#93a2b7; --accent:#7c9cff;
-    --good:#48d597; --bad:#ff7a7a;
-  }
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Helvetica,Arial,sans-serif}
-  .wrap{max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 380px;gap:16px}
-  h1{font-size:28px;margin:0 0 12px}
-  .card{background:var(--panel);border-radius:14px;box-shadow:0 1px 0 #0008;overflow:hidden}
-  .stage{position:relative;aspect-ratio:4/3;background:#0f131b}
-  .stage img.portrait{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;user-select:none;pointer-events:none}
-  /* lips canvas sits on top */
-  canvas#lips {position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
-  .toolbar{display:flex;gap:8px;align-items:center;padding:12px;border-top:1px solid #0c111a}
-  .btn{background:#2a3443;color:#e7edf5;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
-  .btn:active{transform:translateY(1px)}
-  .btn.prim{background:var(--accent)}
-  .sel{background:#1b2230;border:1px solid #2a3443;border-radius:10px;color:#e7edf5;padding:10px 12px}
-  .kv{display:flex;gap:12px;align-items:center}
-  .kv label{color:var(--muted);font-size:13px}
-  .hint{font-size:12px;color:var(--muted);padding:10px 12px;border-top:1px solid #0c111a}
-  .side{padding:14px}
-  .log{height:540px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap;color:#a8b7cb}
-  .pill{padding:3px 8px;border-radius:999px;font-size:11px;background:#1b2230;border:1px solid #2a3443}
-  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-  input[type="range"]{width:160px}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="card">
-    <div class="stage" id="stage">
-      <img class="portrait" id="portrait" src="/Emma_EmotiKnow_Companion.png" alt="Emma" />
-      <canvas id="lips"></canvas>
-    </div>
-    <div class="toolbar">
-      <button id="start" class="btn prim">Start</button>
-      <button id="hangup" class="btn">Hang Up</button>
-      <select id="voice" class="sel">
-        <option value="shimmer" selected>Shimmer (female, bright)</option>
-        <option value="ballad">Ballad (feminine, lyrical)</option>
-        <option value="marin">Marin (female, warm)</option>
-        <option value="verse">Verse (neutral)</option>
-      </select>
-      <div class="kv">
-        <label>Target width</label><input id="targetWidth" type="range" min="40" max="140" value="82" />
-        <span id="twVal" class="pill">82px</span>
-      </div>
-      <div class="kv">
-        <label>Scale</label><input id="scale" type="range" min="0.5" max="1.8" step="0.01" value="1.00" />
-        <span id="scVal" class="pill">1.00×</span>
-      </div>
-      <div class="kv">
-        <label>Sensitivity</label><input id="sens" type="range" min="0.1" max="2.5" step="0.05" value="0.9" />
-      </div>
-      <span id="status" class="pill">ended</span>
-    </div>
-    <div class="hint">
-      Tip: click <b>Start</b> once to allow mic. Drag the lips overlay to nudge position, scroll wheel (or “Scale”) to resize.  
-      Your anchor & scale are saved for this browser. If Emma is silent, click Test speaker in your previous build and Start again.
-    </div>
-  </div>
-
-  <div class="card side">
-    <div class="row"><b>Diagnostics</b><span id="model" class="pill"></span></div>
-    <div id="log" class="log"></div>
-  </div>
-</div>
-
 <script>
-/* ---------- basic utils ---------- */
-const logEl = document.getElementById('log');
-const statusEl = document.getElementById('status');
-const modelEl = document.getElementById('model');
-function log(s){ logEl.textContent += s + '\n'; logEl.scrollTop = logEl.scrollHeight; }
-function setStatus(s){ statusEl.textContent = s; }
+/* --- Auto-crop helper: finds non-transparent bbox of an image --- */
+async function autoCropImage(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const { data } = g.getImageData(0, 0, w, h);
 
-/* ---------- mouth frames to load (any that exist will be used) ---------- */
-const MOUTH_FILES = [
-  'A','O','I','E','U-open','U-closed','F','V','L','G','P','SAY'
-];
-/* simple buckets we’ll use based on loudness: closed → mid → open */
-const CLOSED_PREF = ['I','U-closed','L','G','P'];
-const MID_PREF    = ['E','SAY','I','U-open'];
-const OPEN_PREF   = ['A','O','U-open'];
-
-/* ---------- elements ---------- */
-const stage = document.getElementById('stage');
-const portrait = document.getElementById('portrait');
-const lipsCanvas = document.getElementById('lips');
-const ctx = lipsCanvas.getContext('2d');
-const startBtn = document.getElementById('start');
-const hangBtn = document.getElementById('hangup');
-const voiceSel = document.getElementById('voice');
-const twRange = document.getElementById('targetWidth');
-const twVal = document.getElementById('twVal');
-const scRange = document.getElementById('scale');
-const scVal = document.getElementById('scVal');
-const sensRange = document.getElementById('sens');
-
-function resizeCanvas(){ lipsCanvas.width = stage.clientWidth; lipsCanvas.height = stage.clientHeight; }
-new ResizeObserver(resizeCanvas).observe(stage);
-
-/* ---------- persistent calibration ---------- */
-const LS_KEY = 'emma-mouth-calib-v1';
-let calib = {
-  anchor: { x: 523, y: 215 },     // image-space mouth center you saved earlier
-  targetWidth: +twRange.value,    // desired visible lip width (px in image space)
-  globalScale: +scRange.value,    // extra nudge scale
-};
-try { Object.assign(calib, JSON.parse(localStorage.getItem(LS_KEY)||'{}')); } catch{}
-twRange.value = calib.targetWidth; twVal.textContent = calib.targetWidth+'px';
-scRange.value = calib.globalScale; scVal.textContent = calib.globalScale.toFixed(2)+'×';
-function saveCalib(){ localStorage.setItem(LS_KEY, JSON.stringify(calib)); }
-
-/* ---------- load & normalize PNGs ---------- */
-const frames = new Map(); // name -> {img, bbox:{x,y,w,h}}
-async function loadImage(url){
-  return new Promise((res,rej)=>{ const i=new Image(); i.crossOrigin='anonymous'; i.onload=()=>res(i); i.onerror=rej; i.src=url; });
-}
-function alphaBBox(img){
-  // get tight bounds of non-transparent pixels
-  const c=document.createElement('canvas'), cx=c.getContext('2d');
-  c.width=img.naturalWidth; c.height=img.naturalHeight; cx.drawImage(img,0,0);
-  const {data,width,height}=cx.getImageData(0,0,c.width,c.height);
-  let minX=width, minY=height, maxX=-1, maxY=-1;
-  for(let y=0;y<height;y++){
-    for(let x=0;x<width;x++){
-      const a=data[(y*width+x)*4+3];
-      if(a>10){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
+  let minX=w, minY=h, maxX=-1, maxY=-1;
+  for (let y=0; y<h; y++) {
+    for (let x=0; x<w; x++) {
+      const a = data[(y*w + x)*4 + 3];
+      if (a > 10) { // >10 avoids stray antialias pixels
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
     }
   }
-  if(maxX<minX || maxY<minY) return {x:0,y:0,w:img.naturalWidth,h:img.naturalHeight}; // fallback
-  return {x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};
-}
-async function loadFrames(){
-  frames.clear();
-  for(const name of MOUTH_FILES){
-    const url = `/mouth/${name}.png`;
-    try{
-      const img = await loadImage(url);
-      const bbox = alphaBBox(img);
-      frames.set(name,{img, bbox});
-      log(`[load] mouth ${name} ✓ (${img.naturalWidth}×${img.naturalHeight}) bbox ${bbox.w}×${bbox.h}`);
-    }catch{
-      // missing file is fine
-    }
+  if (maxX < 0) {
+    // all transparent – fall back to full image
+    return { img, sx:0, sy:0, sw:w, sh:h };
   }
-  if(frames.size===0) log('No /mouth/*.png found. Please upload your frames into public/mouth/.');
-}
-loadFrames();
-
-/* ---------- coordinate helpers ---------- */
-function imageRect(){ // get portrait image draw rect inside stage (object-fit:contain)
-  const stW = stage.clientWidth, stH = stage.clientHeight;
-  const imgW = portrait.naturalWidth, imgH = portrait.naturalHeight;
-  const scale = Math.min(stW/imgW, stH/imgH);
-  const drawW = imgW*scale, drawH = imgH*scale;
-  const x = (stW - drawW)/2, y=(stH - drawH)/2;
-  return {x,y,w:drawW,h:drawH, scale};
-}
-/* convert image-space (natural px) → canvas coords */
-function toCanvas(xImg, yImg){
-  const r = imageRect();
-  return { x: r.x + xImg * r.scale, y: r.y + yImg * r.scale };
+  const pad = 2; // tiny padding so edges aren’t clipped
+  const sx = Math.max(0, minX - pad);
+  const sy = Math.max(0, minY - pad);
+  const sw = Math.min(w - sx, (maxX - minX + 1) + pad*2);
+  const sh = Math.min(h - sy, (maxY - minY + 1) + pad*2);
+  return { img, sx, sy, sw, sh };
 }
 
-/* ---------- drawing ---------- */
-let currentName = null;
-function pickFrame(level){ // level=0..1 loudness bucket
-  const set = level<0.33 ? CLOSED_PREF : (level<0.66 ? MID_PREF : OPEN_PREF);
-  for(const n of set){ if(frames.has(n)) return n; }
-  // fallback to any available
-  return frames.keys().next().value || null;
-}
-function drawLips(level=0){
-  ctx.clearRect(0,0,lipsCanvas.width,lipsCanvas.height);
-  if(!frames.size) return;
-  currentName = pickFrame(level) || currentName;
-  const fr = frames.get(currentName); if(!fr) return;
+/* --- Load all mouth frames (lower-case names expected) --- */
+const MOUTH_KEYS = ['f','p','g','l','v','i','o','u','say']; // add/remove as you have files
+const mouthFrames = {}; // key -> {img,sx,sy,sw,sh}
 
-  const r = imageRect();
-  const px = r.x + calib.anchor.x * r.scale; // center position in canvas coords
-  const py = r.y + calib.anchor.y * r.scale;
-
-  // normalized scale to make visible alpha bbox width = calib.targetWidth (in image px), then scaled to canvas
-  const normScale = (calib.targetWidth / fr.bbox.w) * r.scale * calib.globalScale;
-
-  const drawW = fr.img.naturalWidth * normScale;
-  const drawH = fr.img.naturalHeight * normScale;
-
-  // We want bbox center to sit at (px,py). Offset from image top-left to bbox center:
-  const ox = (fr.bbox.x + fr.bbox.w/2) * normScale;
-  const oy = (fr.bbox.y + fr.bbox.h/2) * normScale;
-
-  const left = px - ox;
-  const top  = py - oy;
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(fr.img, left, top, drawW, drawH);
-}
-
-/* ---------- interactive nudge + wheel scale ---------- */
-let dragging=false, dragStart=null;
-stage.addEventListener('pointerdown', (e)=>{
-  dragging=true; stage.setPointerCapture(e.pointerId);
-  dragStart={ x: e.clientX, y: e.clientY, anchor:{...calib.anchor} };
-});
-stage.addEventListener('pointermove', (e)=>{
-  if(!dragging) return;
-  // convert delta in canvas px back to image px using image scale
-  const r = imageRect();
-  const dxCanvas = e.clientX - dragStart.x;
-  const dyCanvas = e.clientY - dragStart.y;
-  calib.anchor.x = dragStart.anchor.x + dxCanvas / r.scale;
-  calib.anchor.y = dragStart.anchor.y + dyCanvas / r.scale;
-  saveCalib(); drawLips(lastLevel);
-});
-stage.addEventListener('pointerup', ()=> dragging=false);
-stage.addEventListener('wheel', (e)=>{
-  e.preventDefault();
-  const f = Math.exp(-e.deltaY * 0.0015); // smooth zoom
-  calib.globalScale = Math.min(1.8, Math.max(0.5, calib.globalScale * f));
-  scRange.value = calib.globalScale;
-  scVal.textContent = calib.globalScale.toFixed(2)+'×';
-  saveCalib(); drawLips(lastLevel);
-},{passive:false});
-
-twRange.addEventListener('input', ()=>{
-  calib.targetWidth = +twRange.value; twVal.textContent = calib.targetWidth+'px';
-  saveCalib(); drawLips(lastLevel);
-});
-scRange.addEventListener('input', ()=>{
-  calib.globalScale = +scRange.value; scVal.textContent = calib.globalScale.toFixed(2)+'×';
-  saveCalib(); drawLips(lastLevel);
-});
-
-/* ---------- audio + simple energy mapper ---------- */
-let pc=null, analyser=null, audioCtx=null, rafId=null, lastLevel=0;
-
-function stop(){
-  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
-  if(pc){ pc.getSenders().forEach(s=>s.track&&s.track.stop()); pc.close(); pc=null; }
-  if(audioCtx){ audioCtx.close(); audioCtx=null; }
-  setStatus('ended'); log('[call] ended.');
-}
-hangBtn.onclick = stop;
-
-async function start(){
-  try{
-    setStatus('connecting'); log('[mic] requesting…');
-    const local = await navigator.mediaDevices.getUserMedia({audio:true});
-    log('[mic] granted.');
-
-    pc = new RTCPeerConnection();
-    pc.addTrack(local.getTracks()[0], local);
-
-    // playback of remote (Emma)
-    const remoteAudio = new Audio(); remoteAudio.autoplay = true;
-    pc.ontrack = (e)=>{ remoteAudio.srcObject = e.streams[0]; };
-
-    pc.onconnectionstatechange = ()=>{
-      log(`[pc] state: ${pc.connectionState}`);
-      if(['disconnected','failed','closed'].includes(pc.connectionState)) stop();
-    };
-
-    // lips energy from local mic (so you see it move even before remote speaks)
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    const src = audioCtx.createMediaStreamSource(local);
-    analyser = audioCtx.createAnalyser(); analyser.fftSize=1024;
-    src.connect(analyser);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const voice = voiceSel.value;
-    const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}`);
-    const token = await tokenRes.json();
-    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(token.model)}`,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${token.client_secret.value}`, 'Content-Type':'application/sdp'},
-      body:offer.sdp
+async function loadMouthFrames() {
+  for (const k of MOUTH_KEYS) {
+    const url = `/mouth/${k}.png`;
+    const img = await new Promise((res, rej) => {
+      const el = new Image();
+      el.crossOrigin = 'anonymous';
+      el.onload = () => res(el);
+      el.onerror = rej;
+      el.src = url;
     });
-    const answerSDP = await sdpRes.text();
-    await pc.setRemoteDescription({type:'answer', sdp:answerSDP });
-    modelEl.textContent = token.model;
-    setStatus('live (hands-free) ✨');
-    log('[session] established.');
-
-    tick();
-  }catch(err){
-    console.error(err); log('[error] '+(err?.message||err));
-    setStatus('error');
+    mouthFrames[k] = await autoCropImage(img);
+    console.log(`[load] mouth ${k} ✓ (${img.naturalWidth}×${img.naturalHeight})`);
   }
 }
-startBtn.onclick = start;
 
-function tick(){
-  rafId = requestAnimationFrame(tick);
-  if(!analyser) return;
-  const sens = +sensRange.value;
+/* --- Drawing the mouth: uses crop rect when drawing --- */
+// example draw function; adapt to your code paths
+function drawMouth(ctx, key, dx, dy, targetWidthPx) {
+  const f = mouthFrames[key];
+  if (!f) return;
 
-  // simple RMS loudness
-  const buf = new Float32Array(analyser.fftSize);
-  analyser.getFloatTimeDomainData(buf);
-  let sum=0; for(let i=0;i<buf.length;i++) sum += buf[i]*buf[i];
-  let rms = Math.sqrt(sum / buf.length) * sens;
-  rms = Math.min(1, Math.max(0, rms*3)); // normalize
+  const scale = targetWidthPx / f.sw;
+  const dw = f.sw * scale;
+  const dh = f.sh * scale;
 
-  // smooth
-  lastLevel = lastLevel*0.6 + rms*0.4;
-  drawLips(lastLevel);
+  // center on (dx,dy)
+  const x = dx - dw/2;
+  const y = dy - dh/2;
+
+  ctx.drawImage(f.img, f.sx, f.sy, f.sw, f.sh, x, y, dw, dh);
 }
 
-/* initial draw once portrait has size */
-portrait.onload = ()=>{ resizeCanvas(); drawLips(0); };
-if(portrait.complete) { resizeCanvas(); drawLips(0); }
+/* --- Example glue (adapt to your UI) --- */
+(async () => {
+  await loadMouthFrames();
+  // … initialize mic/pc etc.
+  // during audio frames, pick a key (e.g., 'v' or 'o') and render:
+  // drawMouth(ctx, currentKey, mouthX, mouthY, targetWidthSlider.valueAsNumber);
+})();
 </script>
-</body>
-</html>
