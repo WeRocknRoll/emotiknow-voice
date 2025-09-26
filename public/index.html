@@ -1,406 +1,610 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>EmotiKnow — Emma (Voice Companion)</title>
-<style>
-  :root {
-    --bg: #0b0f14;
-    --panel: #151b22;
-    --ink: #e9eef6;
-    --ink-2: #b7c1cd;
-    --accent: #7c5cff;
-    --ok: #3ddc97;
-    --muted: #243041;
-  }
-  html, body { height: 100%; background: var(--bg); color: var(--ink); margin: 0; font: 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif; }
-  .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
-  h1 { font-size: 22px; margin: 6px 0 14px; font-weight: 700; }
-  .card { background: var(--panel); border: 1px solid #1d2531; border-radius: 14px; overflow: hidden; }
-  .left { padding: 16px; }
-  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .spacer { flex: 1; }
-  button, select, input[type="range"] {
-    background: #1b2330; color: var(--ink); border: 1px solid #283348; border-radius: 10px; height: 40px; padding: 0 14px;
-  }
-  button:hover { border-color: #34435d; }
-  button.primary { background: var(--accent); border-color: var(--accent); }
-  .badge { margin-left: 8px; color: var(--ok); font-weight: 600; }
-  .panel { padding: 16px; }
-  canvas { display: block; width: 100%; height: auto; background: #000; border-radius: 12px; }
-  .hint { color: var(--ink-2); font-size: 13px; margin-top: 10px; }
-  .diag { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-          color: #cfe0ff; font-size: 12.5px; background: var(--panel); border: 1px solid #1d2531; border-radius: 12px; padding: 12px; height: 520px; overflow: auto; }
-  .kv { color: var(--ink-2); font-size: 13px; display: flex; align-items: center; gap: 12px; margin-top: 8px; }
-  .slider { display: flex; align-items: center; gap: 10px; }
-  .slider input { width: 220px; }
-  .pill { padding: 4px 8px; border: 1px solid #2a364a; border-radius: 999px; color: var(--ink-2); font-size: 12px;}
-  .right h3 { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--ink-2); }
-  @media (max-width: 980px){ .wrap{ grid-template-columns: 1fr; } }
-</style>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>EmotiKnow — Emma (Voice Companion)</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card: #121821;
+      --ink: #e9f1ff;
+      --muted: #9fb2cf;
+      --brand: #7c91ff;
+      --accent: #60e3c1;
+      --danger: #ff7d7d;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: radial-gradient(1200px 700px at 40% -200px, #172335 0%, #0b0f14 55%, #0b0f14 100%);
+      color: var(--ink);
+      font: 500 16px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI,
+            Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji",
+            "Segoe UI Emoji", "Segoe UI Symbol";
+    }
+    h1 {
+      font-size: clamp(24px, 3.3vw, 36px);
+      letter-spacing: .2px;
+      margin: 24px 0 12px;
+      font-weight: 800;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px clamp(16px, 3vw, 28px) 64px;
+    }
+
+    .wrap {
+      display: grid;
+      grid-template-columns: 1.2fr .9fr;
+      gap: clamp(16px, 2.8vw, 28px);
+      align-items: start;
+    }
+    @media (max-width: 980px) {
+      .wrap { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 70%) border-box,
+                  linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.02)) padding-box;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    /* --- Portrait stage --- */
+    .stage {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 16/10; /* matches 1920x1200 */
+      min-height: 420px;
+    }
+    .portrait {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+    /* the mouth overlay image */
+    .mouth {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 2px rgba(0,0,0,.3));
+      pointer-events: none;
+      image-rendering: auto;
+    }
+    /* anchor crosshair (shown briefly on re-anchor) */
+    .anchor {
+      position: absolute;
+      left: 0; top: 0;
+      transform: translate(-50%, -50%);
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.8);
+      box-shadow: 0 0 0 3px rgba(0,0,0,.35);
+      display: none;
+      pointer-events: none;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      padding: 14px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(255,255,255,.02));
+    }
+    @media (max-width: 680px) { .controls { grid-template-columns: 1fr; } }
+
+    .control {
+      background: rgba(0,0,0,.15);
+      padding: 12px 12px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .control label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      letter-spacing: .2px;
+    }
+    input[type="range"] { width: 100%; }
+
+    .bar {
+      display: flex;
+      gap: 10px;
+      padding: 14px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(255,255,255,.02));
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button, select {
+      appearance: none;
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+      border: 1px solid rgba(255,255,255,.12);
+      color: var(--ink);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: 650;
+      letter-spacing: .2px;
+      cursor: pointer;
+      outline: none;
+      transition: .15s ease;
+    }
+    button:hover, select:hover { border-color: rgba(255,255,255,.22); }
+    .primary {
+      background: linear-gradient(180deg, var(--brand), #566cff);
+      border-color: transparent;
+      color: white;
+      box-shadow: 0 7px 22px rgba(124,145,255,.35);
+    }
+    .danger {
+      background: linear-gradient(180deg, rgba(255,75,75,.9), rgba(255,75,75,.75));
+      border-color: rgba(255,255,255,.06);
+      box-shadow: 0 7px 22px rgba(255,75,75,.28);
+    }
+
+    /* --- Diagnostics --- */
+    .diag {
+      padding: 14px 14px 8px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .term {
+      padding: 12px 14px 18px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      color: #cfe2ff;
+      height: 430px;
+      overflow: auto;
+      background: repeating-linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.02) 28px, rgba(255,255,255,.03) 28px, rgba(255,255,255,.03) 56px);
+      border-radius: 0 0 var(--radius) var(--radius);
+    }
+    .muted { color: var(--muted); }
+
+    .tip { margin: 12px 14px 16px; color: var(--muted); font-size: 13px; }
+    .kv { opacity: .85; }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card left">
-      <h1>EmotiKnow — Emma (Voice Companion) <span id="status" class="badge">ended</span></h1>
+  <main>
+    <h1>EmotiKnow — Emma (Voice Companion)</h1>
 
-      <div class="panel" style="padding-top:0">
-        <canvas id="stage" width="960" height="600"></canvas>
+    <div class="wrap">
+      <!-- LEFT: Portrait card -->
+      <div class="card">
+        <div id="stage" class="stage">
+          <img id="portrait" class="portrait" src="/m.png" alt="Emma portrait" />
+          <!-- active mouth frame -->
+          <img id="mouth" class="mouth" alt="" />
+          <!-- anchor indicator -->
+          <div id="anchor" class="anchor"></div>
+        </div>
 
-        <div class="row" style="margin-top:12px">
-          <button id="start" class="primary">Start</button>
-          <button id="hangup">Hang Up</button>
-
-          <select id="voice">
-            <option value="shimmer" selected>Shimmer (female, bright)</option>
-            <option value="ballad">Ballad (feminine, lyrical)</option>
-            <option value="alloy">Alloy (neutral)</option>
-            <option value="echo">Echo (neutral)</option>
-            <option value="sage">Sage (female, soft)</option>
-            <option value="ash">Ash (neutral)</option>
-            <option value="verse">Verse (neutral)</option>
-            <option value="marin">Marin (female, warm)</option>
-            <option value="coral">Coral (female, clear)</option>
-            <option value="cedar">Cedar (neutral)</option>
-          </select>
-
-          <div class="spacer"></div>
-
-          <div class="slider">
-            <span class="pill">Target width</span>
-            <input id="targetW" type="range" min="40" max="360" step="1" value="140" />
+        <div class="controls">
+          <div class="control">
+            <label>Target width <span class="kv" id="wKV">120 px</span></label>
+            <input id="wRange" type="range" min="46" max="260" step="2" value="120"/>
+          </div>
+          <div class="control">
+            <label>Scale % <span class="kv" id="sKV">100%</span></label>
+            <input id="sRange" type="range" min="60" max="180" step="1" value="100"/>
+          </div>
+          <div class="control">
+            <label>Gate (silence threshold) <span class="kv" id="gKV">0.07</span></label>
+            <input id="gRange" type="range" min="0" max="0.25" step="0.005" value="0.07"/>
           </div>
         </div>
 
-        <div class="hint">
-          Tip: Click the portrait to re-anchor the mouth; scroll wheel (or trackpad pinch) adjusts the mouth size too.  
-          If you don’t hear Emma, click <b>Hang Up</b>, then <b>Start</b> again (browsers sometimes block autoplay).
+        <div class="bar">
+          <button id="btnStart" class="primary">Start</button>
+          <button id="btnHang" class="danger">Hang Up</button>
+
+          <select id="voiceSel" title="Voice">
+            <option value="shimmer" selected>Shimmer (female, bright)</option>
+            <option value="ballad">Ballad (feminine, lyrical)</option>
+            <option value="alloy">Alloy (neutral)</option>
+            <option value="echo">Echo</option>
+            <option value="ash">Ash</option>
+            <option value="sage">Sage</option>
+            <option value="marin">Marin</option>
+            <option value="verse">Verse</option>
+            <option value="coral">Coral</option>
+            <option value="cedar">Cedar</option>
+          </select>
+        </div>
+
+        <div class="tip">
+          Tip: Click the portrait to re-anchor the lips; use the sliders to size & scale.
+          If you don’t hear Emma, click <b>Hang Up</b> then <b>Start</b> again (sometimes autoplay is blocked).
         </div>
       </div>
-    </div>
 
-    <div class="right">
-      <div class="card panel">
-        <h3>Diagnostics</h3>
-        <div class="kv">
-          <span class="pill" id="modelBadge">gpt-4o-mini-realtime-preview</span>
-          <span class="pill" id="vuPill">VU: 0.00</span>
-          <span class="pill" id="phonPill">phoneme: …</span>
-          <span class="pill" id="framesPill">frames: 0</span>
+      <!-- RIGHT: Diagnostics -->
+      <div class="card">
+        <div class="diag">
+          <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+            <div>
+              <div style="font-weight:800">Diagnostics</div>
+              <div class="muted" style="font-size:13px">
+                <span>model:</span>
+                <code id="modelKV">gpt-4o-mini-realtime-preview</code>
+                •
+                <span>VU:</span> <code id="vuKV">0.00</code>
+                •
+                <span>phoneme:</span> <code id="phKV">—</code>
+                •
+                <span>frames:</span> <code id="framesKV">0</code>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="log" class="diag"></div>
+        <pre id="term" class="term"></pre>
       </div>
     </div>
-  </div>
+  </main>
 
-  <audio id="remoteAudio" autoplay></audio>
-
-<script>
-/* ==============================
-   Utilities / Logging
-================================ */
-const $ = (s)=>document.querySelector(s);
-const logEl = $('#log');
-function log(msg){ const t = new Date().toTimeString().slice(0,8); logEl.textContent += `[${t}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; }
-function setStatus(s){ $('#status').textContent = s; }
-function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
-
-/* ==============================
-   Assets: portrait + mouth frames (auto-crop)
-================================ */
-const portraitURL = '/Emma_EmotiKnow_Companion.png';
-
-// Mouth keys we will try to load (lower-case files in /public/mouth/)
-const MOUTH_KEYS = ['f','p','g','l','v','i','o','u','say'];
-
-const mouthFrames = new Map(); // key -> {img, sx,sy,sw,sh}
-let framesLoaded = 0;
-
-function loadImage(url){
-  return new Promise((res, rej)=>{
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = ()=>res(img);
-    img.onerror = (e)=>rej(new Error(`fail ${url}`));
-    img.src = url;
-  });
-}
-
-// find alpha bbox
-function autoCrop(img){
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const g = c.getContext('2d');
-  g.drawImage(img, 0,0);
-  const { data } = g.getImageData(0,0,w,h);
-  let minX=w, minY=h, maxX=-1, maxY=-1;
-  for (let y=0; y<h; y++){
-    for (let x=0; x<w; x++){
-      const a = data[(y*w + x)*4 + 3];
-      if (a > 10){
-        if (x<minX) minX=x;
-        if (y<minY) minY=y;
-        if (x>maxX) maxX=x;
-        if (y>maxY) maxY=y;
-      }
-    }
-  }
-  if (maxX < 0) return { img, sx:0, sy:0, sw:w, sh:h };
-  const pad=2;
-  const sx = Math.max(0, minX - pad);
-  const sy = Math.max(0, minY - pad);
-  const sw = Math.min(w - sx, (maxX-minX+1) + pad*2);
-  const sh = Math.min(h - sy, (maxY-minY+1) + pad*2);
-  return { img, sx, sy, sw, sh };
-}
-
-async function loadAssets(){
-  const portrait = await loadImage(portraitURL);
-  log(`portrait loaded (${portrait.naturalWidth}×${portrait.naturalHeight})`);
-
-  framesLoaded = 0;
-  for (const k of MOUTH_KEYS){
-    try {
-      const url = `/mouth/${k}.png`;
-      const img = await loadImage(url);
-      const crop = autoCrop(img);
-      mouthFrames.set(k, crop);
-      framesLoaded++;
-      log(`[load] mouth ${k} ✓ (${img.naturalWidth}×${img.naturalHeight}) bbox ${crop.sw}×${crop.sh}`);
-    } catch(e){
-      log(`[load] mouth ${k} ✗ (not found)`);
-    }
-  }
-  $('#framesPill').textContent = `frames: ${framesLoaded}`;
-  return { portrait };
-}
-
-/* ==============================
-   Canvas + interaction
-================================ */
-const stage = $('#stage');
-const ctx   = stage.getContext('2d');
-
-let portraitImg = null;
-
-// mouth placement & size (saved to localStorage)
-let mouthX = +(localStorage.getItem('mouthX') ?? 480);
-let mouthY = +(localStorage.getItem('mouthY') ?? 360);
-let targetW = +(localStorage.getItem('targetW') ?? 140);
-$('#targetW').value = targetW;
-
-function savePlacement(){
-  localStorage.setItem('mouthX', mouthX);
-  localStorage.setItem('mouthY', mouthY);
-  localStorage.setItem('targetW', targetW);
-}
-
-stage.addEventListener('click', (e)=>{
-  const r = stage.getBoundingClientRect();
-  const x = (e.clientX - r.left) * (stage.width / r.width);
-  const y = (e.clientY - r.top)  * (stage.height/ r.height);
-  mouthX = x; mouthY = y; savePlacement();
-  log(`mouth anchor -> x=${mouthX|0}, y=${mouthY|0}`);
-});
-
-stage.addEventListener('wheel', (e)=>{
-  if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey){
-    // allow page zoom gestures
-    return;
-  }
-  e.preventDefault();
-  targetW = clamp(targetW + (e.deltaY<0? 6 : -6), 40, 360);
-  $('#targetW').value = targetW; savePlacement();
-}, { passive:false });
-
-$('#targetW').addEventListener('input', e=>{
-  targetW = +e.target.value; savePlacement();
-});
-
-let currentKey = 'say'; // fallback
-let lastDraw = 0;
-
-function draw(){
-  requestAnimationFrame(draw);
-  const now = performance.now();
-  if (now - lastDraw < 16) return; // ~60fps
-  lastDraw = now;
-
-  // portrait
-  if (portraitImg){
-    ctx.clearRect(0,0,stage.width, stage.height);
-    // Fit portrait into canvas with cover
-    ctx.drawImage(portraitImg, 0,0, stage.width, stage.height);
-  } else {
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0,0,stage.width, stage.height);
-  }
-
-  // draw current mouth
-  const f = mouthFrames.get(currentKey) || mouthFrames.get('say');
-  if (f){
-    const scale = targetW / f.sw;
-    const dw = f.sw * scale;
-    const dh = f.sh * scale;
-    const x = mouthX - dw/2;
-    const y = mouthY - dh/2;
-    ctx.drawImage(f.img, f.sx, f.sy, f.sw, f.sh, x, y, dw, dh);
-  }
-}
-requestAnimationFrame(draw);
-
-/* ==============================
-   Audio analysis for “phoneme” heuristic
-================================ */
-let audioCtx, analyser, srcNode;
-let vuSmooth = 0;
-
-function setupAnalyser(stream){
-  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-  srcNode = audioCtx.createMediaStreamSource(stream);
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = .7;
-  srcNode.connect(analyser);
-}
-
-const fft = new Float32Array(1024);
-const bins = new Uint8Array(1024);
-
-// crude vowel/consonant/arousal mapping
-function pickPhoneme(){
-  if (!analyser) return;
-
-  analyser.getFloatTimeDomainData?.(fft);
-  // RMS
-  let sum=0; for (let i=0;i<fft.length;i++){ const v=fft[i]; sum += v*v; }
-  const rms = Math.sqrt(sum/fft.length) || 0;
-  vuSmooth = vuSmooth*0.85 + rms*0.15;
-  $('#vuPill').textContent = `VU: ${vuSmooth.toFixed(2)}`;
-
-  analyser.getByteFrequencyData(bins);
-  // rough spectral centroid proxy
-  let num=0, den=0;
-  for (let i=0;i<bins.length;i++){ num += i * bins[i]; den += bins[i]; }
-  const centroid = den ? (num / den) : 0;
-
-  // thresholds (tune to taste)
-  const loud = vuSmooth > 0.05;
-  const veryLoud = vuSmooth > 0.09;
-  const bright = centroid > 180;
-  const mid    = centroid > 120 && centroid <= 180;
-  const dark   = centroid <= 120;
-
-  // choose a frame by bucket
-  // (if you provided only some mouth keys, the map gracefully falls back)
-  let key = 'say';
-  if (!loud) {
-    key = 'u'; // resting / closedish
-  } else if (veryLoud && dark) {
-    key = 'o'; // wide-round (like “oh”)
-  } else if (veryLoud && bright) {
-    key = 'v'; // wide open (ah)
-  } else if (mid) {
-    key = 'i'; // mid vowel (eh/ih)
-  } else if (bright) {
-    key = 'f'; // teeth/labiodental look
-  } else {
-    key = 'g'; // neutral openish
-  }
-  if (!mouthFrames.has(key)) key = mouthFrames.has('say') ? 'say' : [...mouthFrames.keys()][0];
-  currentKey = key;
-  $('#phonPill').textContent = `phoneme: ${currentKey}`;
-}
-
-/* ==============================
-   WebRTC: OpenAI Realtime
-================================ */
-const remoteAudio = $('#remoteAudio');
-let pc = null;
-let localStream = null;
-
-async function start(){
-  try{
-    setStatus('connecting');
-    log('Requesting microphone…');
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    setupAnalyser(localStream);
-
-    // token
-    const v = $('#voice').value;
-    const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(v)}`);
-    if (!tokenRes.ok){
-      const body = await tokenRes.text();
-      throw new Error(`Token endpoint error: ${tokenRes.status}\n${body}`);
-    }
-    const { client_secret } = await tokenRes.json();
-    log('Token response status: 200');
-
-    pc = new RTCPeerConnection();
-    pc.ontrack = (e)=>{ remoteAudio.srcObject = e.streams[0]; };
-    pc.onconnectionstatechange = ()=>{
-      log(`pc state: ${pc.connectionState}`);
-      $('#status').textContent = pc.connectionState;
+  <script>
+    // --------------------------
+    // Utilities
+    // --------------------------
+    const $ = (sel) => document.querySelector(sel);
+    const log = (msg) => {
+      const t = new Date().toLocaleTimeString();
+      term.textContent += `[${t}] ${msg}\n`;
+      term.scrollTop = term.scrollHeight;
     };
 
-    // local audio to pc
-    localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
+    // Elements
+    const stage    = $('#stage');
+    const portrait = $('#portrait');
+    const mouthImg = $('#mouth');
+    const anchorEl = $('#anchor');
 
-    // offer
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    const wRange   = $('#wRange');
+    const sRange   = $('#sRange');
+    const gRange   = $('#gRange');
+    const wKV      = $('#wKV');
+    const sKV      = $('#sKV');
+    const gKV      = $('#gKV');
 
-    // POST SDP to OpenAI
-    const base = 'https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview';
-    const sdpRes = await fetch(base, {
-      method:'POST',
-      headers:{
-        'Authorization': `Bearer ${client_secret.value}`,
-        'Content-Type': 'application/sdp'
-      },
-      body: offer.sdp
+    const btnStart = $('#btnStart');
+    const btnHang  = $('#btnHang');
+    const voiceSel = $('#voiceSel');
+
+    const modelKV  = $('#modelKV');
+    const vuKV     = $('#vuKV');
+    const phKV     = $('#phKV');
+    const framesKV = $('#framesKV');
+    const term     = $('#term');
+
+    // --------------------------
+    // Assets & frame management
+    // --------------------------
+    const FRAME_ORDER = ['m','f','p','g','l','v','o','i','u','say'];
+    const frames = {};
+    let framesLoaded = 0;
+
+    function preloadFrames() {
+      framesLoaded = 0;
+      FRAME_ORDER.forEach(name => {
+        const img = new Image();
+        img.onload = () => {
+          frames[name] = img;
+          framesLoaded++;
+          framesKV.textContent = framesLoaded;
+          log(`[load] mouth ${name} ✓ (${img.naturalWidth}×${img.naturalHeight}) bbox ${img.naturalWidth}×${img.naturalHeight}`);
+          if (name === 'm') mouthImg.src = img.src; // default
+        };
+        img.onerror = () => log(`[warn] failed to load /mouth/${name}.png`);
+        img.src = `/mouth/${name}.png`;
+      });
+    }
+
+    // If /mouth/ isn't there, show a helpful hint
+    async function verifyMouthFolder() {
+      try {
+        // small HEAD request to /mouth/m.png; if 404, the server likely doesn't see the folder
+        const r = await fetch('/mouth/m.png', { method: 'HEAD' });
+        if (!r.ok) {
+          log('No /mouth/*.png found. Please upload your frames into public/mouth/.');
+        }
+      } catch (e) {
+        log('No /mouth/*.png found. Please upload your frames into public/mouth/.');
+      }
+    }
+
+    // --------------------------
+    // Sizing & anchoring
+    // --------------------------
+    let mouthCenter = { x: 0.5, y: 0.5 }; // in 0..1 relative to portrait
+    let targetWidthPx = parseInt(wRange.value, 10);
+    let globalScale   = parseInt(sRange.value, 10) / 100;
+    let gate          = parseFloat(gRange.value);
+
+    // Update UI kvs
+    function updateKVs() {
+      wKV.textContent = `${targetWidthPx} px`;
+      sKV.textContent = `${Math.round(globalScale*100)}%`;
+      gKV.textContent = `${gate.toFixed(3)}`;
+    }
+    updateKVs();
+
+    // Compute CSS position for mouth center & width
+    function layoutMouth() {
+      if (!portrait.complete) return;
+      const rect = stage.getBoundingClientRect();
+      // portrait is object-fit:contain; compute its rendered box inside stage
+      const imgAR = portrait.naturalWidth / portrait.naturalHeight;
+      const boxAR = rect.width / rect.height;
+
+      let renderW, renderH, offsetX, offsetY;
+      if (boxAR > imgAR) {
+        // portrait height fills
+        renderH = rect.height;
+        renderW = renderH * imgAR;
+        offsetX = (rect.width - renderW)/2;
+        offsetY = 0;
+      } else {
+        // portrait width fills
+        renderW = rect.width;
+        renderH = renderW / imgAR;
+        offsetX = 0;
+        offsetY = (rect.height - renderH)/2;
+      }
+      // center in pixels
+      const cx = offsetX + mouthCenter.x * renderW;
+      const cy = offsetY + mouthCenter.y * renderH;
+
+      // final width in CSS pixels
+      const cssW = targetWidthPx * globalScale;
+      mouthImg.style.left = `${cx}px`;
+      mouthImg.style.top  = `${cy}px`;
+      mouthImg.style.width = `${cssW}px`;
+
+      // flash anchor briefly
+      if (anchorEl._flash) {
+        anchorEl.style.left = `${cx}px`;
+        anchorEl.style.top  = `${cy}px`;
+        anchorEl.style.display = 'block';
+        clearTimeout(anchorEl._flash);
+        anchorEl._flash = setTimeout(() => anchorEl.style.display = 'none', 500);
+      }
+    }
+
+    // Re-anchor by clicking on the portrait
+    stage.addEventListener('click', (e) => {
+      const rect = stage.getBoundingClientRect();
+      // compute portrait render box as in layoutMouth()
+      const imgAR = portrait.naturalWidth / portrait.naturalHeight;
+      const boxAR = rect.width / rect.height;
+      let renderW, renderH, offsetX, offsetY;
+      if (boxAR > imgAR) {
+        renderH = rect.height;
+        renderW = renderH * imgAR;
+        offsetX = (rect.width - renderW)/2;
+        offsetY = 0;
+      } else {
+        renderW = rect.width;
+        renderH = renderW / imgAR;
+        offsetX = 0;
+        offsetY = (rect.height - renderH)/2;
+      }
+      const x = (e.clientX - rect.left - offsetX) / renderW;
+      const y = (e.clientY - rect.top  - offsetY) / renderH;
+      // clamp
+      mouthCenter.x = Math.max(0, Math.min(1, x));
+      mouthCenter.y = Math.max(0, Math.min(1, y));
+      anchorEl._flash = true;
+      layoutMouth();
+      // persist
+      localStorage.setItem('ek_mouth_center', JSON.stringify(mouthCenter));
+      log(`Saved mouth: x=${(mouthCenter.x*portrait.naturalWidth).toFixed(3)}, y=${(mouthCenter.y*portrait.naturalHeight).toFixed(3)}`);
     });
-    const answerSDP = await sdpRes.text();
-    await pc.setRemoteDescription({ type:'answer', sdp: answerSDP });
 
-    setStatus('live');
-    log('Session established.');
+    // Wheel changes target width quickly (nice for fine-tune)
+    stage.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      targetWidthPx = Math.max(46, Math.min(260, targetWidthPx + (e.deltaY > 0 ? -4 : 4)));
+      wRange.value = targetWidthPx;
+      updateKVs();
+      layoutMouth();
+    }, { passive:false });
 
-  }catch(err){
-    setStatus('error');
-    log(`Error: ${err.message || err}`);
-  }
-}
+    window.addEventListener('resize', layoutMouth);
+    portrait.addEventListener('load', layoutMouth);
+    wRange.addEventListener('input', () => {
+      targetWidthPx = parseInt(wRange.value, 10);
+      updateKVs(); layoutMouth();
+    });
+    sRange.addEventListener('input', () => {
+      globalScale = parseInt(sRange.value, 10)/100;
+      updateKVs(); layoutMouth();
+    });
+    gRange.addEventListener('input', () => {
+      gate = parseFloat(gRange.value);
+      updateKVs();
+    });
 
-function hangup(){
-  setStatus('ended');
-  if (pc) try { pc.getSenders().forEach(s=>s.track && s.track.stop()); pc.close(); } catch{}
-  pc = null;
-}
+    // restore saved center
+    try {
+      const saved = JSON.parse(localStorage.getItem('ek_mouth_center') || 'null');
+      if (saved && typeof saved.x==='number' && typeof saved.y==='number') mouthCenter = saved;
+    } catch(_) {}
 
-/* ==============================
-   Boot
-================================ */
-(async function init(){
-  try{
-    const { portrait } = await loadAssets();
-    portraitImg = portrait;
-    draw();
+    // --------------------------
+    // Mouth animation
+    // --------------------------
+    let activeFrame = 'm';
+    function setFrame(name) {
+      const img = frames[name] || frames['m'];
+      if (!img) return;
+      if (activeFrame !== name) {
+        mouthImg.src = img.src;
+        activeFrame = name;
+      }
+    }
 
-    // loop the simple audio->mouth mapping
-    setInterval(pickPhoneme, 50);
+    // Very light envelope follower for VU fallback
+    let vu = 0;
+    let vuDecay = 0.92;
+    function updateVU(sample) {
+      vu = Math.max(sample, vu * vuDecay);
+      vuKV.textContent = vu.toFixed(2);
+    }
 
-    // UI
-    $('#start').onclick = start;
-    $('#hangup').onclick = hangup;
-    $('#voice').onchange = ()=>log(`voice -> ${$('#voice').value}`);
-    $('#modelBadge').textContent = 'gpt-4o-mini-realtime-preview';
-  }catch(e){
-    log(`Asset init error: ${e.message}`);
-  }
-})();
-</script>
+    // map phoneme → frame (rough)
+    function mapPhonemeToFrame(ph) {
+      ph = (ph || '').toLowerCase();
+      if (!ph) return 'm';
+      if (/[fv]/.test(ph)) return 'f';
+      if (/p|b|m/.test(ph)) return 'p';
+      if (/l/.test(ph)) return 'l';
+      if (/g|k/.test(ph)) return 'g';
+      if (/o|ɔ|ɑ|ʌ/.test(ph)) return 'o';
+      if (/i|ɪ|ee/.test(ph)) return 'i';
+      if (/u|ʊ|oo/.test(ph)) return 'u';
+      if (/v/.test(ph)) return 'v';
+      if (/s|z|ʃ|ʒ|t͡s|t͡ʃ/.test(ph)) return 'say';
+      return 'm';
+    }
+
+    // pick frame from VU (simplified)
+    function pickFrameFromVU() {
+      if (vu < gate) return 'm';
+      if (vu < gate + 0.03) return 'i';
+      if (vu < gate + 0.06) return 'o';
+      if (vu < gate + 0.09) return 'say';
+      return 'u';
+    }
+
+    // animation tick (60fps)
+    let rafId = 0;
+    function tick() {
+      // if no phoneme in last 100ms, fallback to VU
+      if (Date.now() - lastPhonemeAt > 100) {
+        setFrame(pickFrameFromVU());
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+
+    // --------------------------
+    // Realtime voice (OpenAI)
+    // --------------------------
+    let pc, micStream, remoteStream, ws;
+    let lastPhonemeAt = 0;
+
+    async function connect() {
+      const voice = voiceSel.value;
+      modelKV.textContent = 'gpt-4o-mini-realtime-preview';
+      // Create local peer connection
+      pc = new RTCPeerConnection();
+      remoteStream = new MediaStream();
+      const audio = new Audio();
+      audio.autoplay = true;
+      audio.srcObject = remoteStream;
+
+      pc.ontrack = (e) => {
+        e.streams[0].getAudioTracks().forEach(t => remoteStream.addTrack(t));
+      };
+      pc.oniceconnectionstatechange = () => log(`pc state: ${pc.connectionState}`);
+
+      // mic
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream.getTracks().forEach(t => pc.addTrack(t, micStream));
+
+      // simple VU envelope
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ctx.createMediaStreamSource(micStream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+
+      const vuBuf = new Uint8Array(analyser.frequencyBinCount);
+      (function vuLoop() {
+        analyser.getByteTimeDomainData(vuBuf);
+        let peak = 0;
+        for (let i=0;i<vuBuf.length;i++) {
+          const v = (vuBuf[i]-128)/128;
+          peak = Math.max(peak, Math.abs(v));
+        }
+        updateVU(peak);
+        requestAnimationFrame(vuLoop);
+      })();
+
+      // datachannel for phonemes (if server emits them)
+      const dc = pc.createDataChannel('oai-events');
+      dc.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'phoneme') {
+            const frame = mapPhonemeToFrame(msg.value);
+            phKV.textContent = msg.value;
+            lastPhonemeAt = Date.now();
+            setFrame(frame);
+          }
+        } catch {}
+      };
+
+      // SDP offer to your token endpoint
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/sdp' },
+        body: offer.sdp
+      });
+      if (!tokenRes.ok) throw new Error('Token endpoint error');
+      const answerSDP = await tokenRes.text();
+      await pc.setRemoteDescription({ type:'answer', sdp: answerSDP });
+
+      log('Session established. Speak anytime.');
+      // start animation
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function hangup() {
+      try { cancelAnimationFrame(rafId); } catch {}
+      try { pc && pc.close(); } catch {}
+      try { micStream && micStream.getTracks().forEach(t=>t.stop()); } catch {}
+      pc = null; micStream=null; remoteStream=null;
+      setFrame('m');
+      phKV.textContent = '—';
+      vuKV.textContent = '0.00';
+      log('Call ended. (user)');
+    }
+
+    // --------------------------
+    // Wire up UI
+    // --------------------------
+    btnStart.addEventListener('click', connect);
+    btnHang.addEventListener('click', hangup);
+
+    // Init
+    (async function init() {
+      await verifyMouthFolder();
+      preloadFrames();
+      // if you already measured her mouth on this image once,
+      // your x/y were saved and will be applied here:
+      layoutMouth();
+      // brief hint: flash the anchor at the saved spot
+      anchorEl._flash = true; layoutMouth();
+      setTimeout(()=>anchorEl.style.display='none', 600);
+    })();
+  </script>
 </body>
 </html>
