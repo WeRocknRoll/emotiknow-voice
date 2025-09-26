@@ -3,395 +3,138 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>EmotiKnow — Emma (Mouth Rig)</title>
+  <title>EmotiKnow — Emma (Voice Companion)</title>
   <style>
-    :root{
-      --bg:#0f1117; --panel:#151823; --ink:#e6e8ef; --muted:#9aa3b2; --accent:#8ab4ff; --ok:#60d394; --err:#ff6b6b;
-      --ring: 12px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:linear-gradient(180deg,#0f1117 0%, #0b0d12 100%); color:var(--ink);
-      font:14px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
-    }
-
-    .wrap{max-width:1200px; margin:32px auto; padding:0 16px; display:grid; grid-template-columns: 1fr 360px; gap:20px}
-    @media (max-width: 1100px){ .wrap{grid-template-columns:1fr} }
-
-    .panel{background:var(--panel); border:1px solid #1e2332; border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,.35)}
-    .pad{padding:18px}
-
-    .title{font-weight:700; font-size:18px; letter-spacing:.2px; display:flex; align-items:center; gap:10px}
-    .muted{color:var(--muted)}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-
-    /* portrait stage */
-    .stage{
-      position:relative; aspect-ratio:16/10; width:100%;
-      border-radius:12px; overflow:hidden; background:#0a0d13; border:1px solid #1a2030
-    }
-    .stage img.portrait{position:absolute; inset:0; width:100%; height:100%; object-fit:contain; user-select:none; -webkit-user-drag:none;}
-    .stage img.mouth{
-      position:absolute; left:50%; top:50%;
-      transform:translate(-50%,-50%) scale(1);
-      filter:contrast(105%) saturate(105%);
-      opacity:.97; pointer-events:none;
-    }
-    .stage .crosshair{
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:18px; height:18px; border-radius:50%; outline:2px solid rgba(255,255,255,.75); outline-offset:-3px;
-      box-shadow:0 0 0 3px rgba(0,0,0,.35), 0 0 14px rgba(138,180,255,.35);
-      pointer-events:none;
-    }
-    .hint{margin-top:10px; color:var(--muted)}
-
-    /* controls */
-    .controls{display:grid; gap:14px; grid-template-columns:repeat(2,minmax(0,1fr))}
-    @media (max-width:700px){ .controls{grid-template-columns:1fr} }
-    .ctl{background:#101422; border:1px solid #1e2332; border-radius:12px; padding:12px}
-    .ctl label{display:flex; justify-content:space-between; color:var(--muted); margin-bottom:8px}
-    .ctl input[type=range]{width:100%}
-    .buttons{display:flex; gap:10px; flex-wrap:wrap}
-
-    .btn{
-      background:#1b2234; color:#e8ecf7; border:1px solid #263053; border-radius:11px; padding:10px 14px;
-      cursor:pointer; transition:.15s transform, .15s background;
-    }
-    .btn:hover{background:#223055}
-    .btn.primary{background:#2a3b6e; border-color:#314783}
-    .btn.primary:hover{background:#334b84}
-    .btn.ghost{background:transparent; border-color:#2a3144}
-    .badge{display:inline-block; padding:2px 8px; font-size:12px; border-radius:999px; background:#21304d; color:#b9d0ff}
-
-    /* diagnostics */
-    .diag{height:100%; display:flex; flex-direction:column}
-    .diag .head{padding:14px 16px; border-bottom:1px solid #1e2332}
-    .diag pre{
-      margin:0; padding:14px; height:520px; overflow:auto; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size:12px; color:#cfe2ff; background:#0c1019; border-bottom-left-radius:14px; border-bottom-right-radius:14px;
-    }
-    .diag .head .rings{display:flex; gap:10px; align-items:center; color:var(--muted)}
-    .kv{display:flex; align-items:center; gap:6px}
-    .kv b{color:#bcd2ff}
-    .ok{color:var(--ok)} .err{color:var(--err)}
+    :root{--bg:#0f1117;--panel:#151823;--ink:#e6e8ef;--muted:#9aa3b2;}
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;gap:16px;padding:16px;overflow:hidden}
+    .card{background:var(--panel);border-radius:14px;box-shadow:0 0 0 1px #0007,0 8px 30px #0008;padding:16px;display:flex;flex-direction:column;gap:12px}
+    .left{flex:1;min-width:640px} .right{width:420px;min-width:320px}
+    .title{display:flex;align-items:center;gap:12px;font-weight:700}
+    .badge{background:#263043;color:#9cc3ff;border-radius:999px;padding:4px 10px;font-size:12px}
+    .fit-toggle{margin-left:auto}
+    .stage{position:relative;background:#0b0d13;border-radius:10px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+    #portrait{max-width:100%;max-height:100%;object-fit:contain;user-select:none;pointer-events:none}
+    #mouth{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:260px;filter:drop-shadow(0 0 12px #0006);user-select:none;pointer-events:none}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .row .label{min-width:90px;color:var(--muted)} input[type=range]{width:240px}
+    .btn{background:#1f2532;color:var(--ink);border:1px solid #0007;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn:hover{background:#242c3b} .btn.ghost{background:transparent;border:1px solid #2b3342}
+    pre{margin:0;font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;color:#c6d3f0;white-space:pre-wrap}
+    .tip{color:var(--muted)}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <!-- LEFT: Portrait + Controls -->
-    <div class="panel pad">
-      <div class="title">
-  EmotiKnow — Emma (Voice Companion)
-  <span class="badge" id="status">idle</span>
-  <button id="fitBtn" class="btn ghost fit-toggle">Fit: contain</button>
-</div>
-
-      <div class="stage" id="stage">
-        <img id="portrait" class="portrait" alt="portrait" />
-        <img id="mouth" class="mouth" alt="mouth" />
-        <div id="crosshair" class="crosshair" hidden></div>
-      </div>
-
-      <div class="hint">
-        Tip: Click Emma’s mouth to re-anchor. Use sliders to size & scale the lips. The anchor is saved per browser.
-      </div>
-
-      <div class="controls" style="margin-top:14px">
-        <div class="ctl">
-          <label><span>Target width</span><span id="wVal">260 px</span></label>
-          <input id="widthSlider" type="range" min="80" max="420" value="260">
-        </div>
-        <div class="ctl">
-          <label><span>Scale</span><span id="sVal">100 %</span></label>
-          <input id="scaleSlider" type="range" min="50" max="220" value="100">
-        </div>
-      </div>
-
-      <div class="buttons" style="margin-top:14px">
-        <button id="startBtn" class="btn primary">Start</button>
-        <button id="stopBtn" class="btn ghost">Hang Up</button>
-        <button id="testBtn" class="btn">Test speaker</button>
-      </div>
-
-      <div class="hint" style="margin-top:8px">
-        If you don’t hear Emma, click <b>Test speaker</b>, then click <b>Start</b> again (autoplay can be blocked).
-      </div>
+  <section class="card left">
+    <div class="title">
+      EmotiKnow — Emma (Voice Companion)
+      <span class="badge" id="status">idle</span>
+      <button id="fitBtn" class="btn ghost fit-toggle">Fit: contain</button>
     </div>
 
-    <!-- RIGHT: Diagnostics -->
-    <div class="panel diag">
-      <div class="head">
-        <div class="title" style="margin:0 0 4px">Diagnostics</div>
-        <div class="rings">
-          <div class="kv"><span class="muted">model:</span> <b id="modelName">gpt-4o-mini-realtime-preview</b></div>
-          <div class="kv"><span class="muted">frames:</span> <b id="frameCount">0</b></div>
-          <div class="kv"><span class="muted">VU:</span> <b id="vu">0.00</b></div>
-        </div>
-      </div>
-      <pre id="log"></pre>
+    <div id="stage" class="stage">
+      <img id="portrait" alt="portrait" />
+      <img id="mouth" alt="mouth" />
     </div>
-  </div>
+
+    <div class="row">
+      <span class="label">Target width</span>
+      <input id="widthSlider" type="range" min="80" max="480" value="260" />
+      <span id="widthVal">260 px</span>
+
+      <span class="label" style="margin-left:18px">Scale</span>
+      <input id="scaleSlider" type="range" min="50" max="220" value="100" />
+      <span id="scaleVal">100 %</span>
+
+      <button id="startBtn" class="btn">Start</button>
+      <button id="stopBtn"  class="btn ghost">Hang Up</button>
+    </div>
+
+    <div class="tip">Tip: Click Emma’s mouth to re-anchor the lips; use the sliders to size &amp; scale. The anchor is saved per browser.</div>
+  </section>
+
+  <section class="card right">
+    <div class="title">Diagnostics</div>
+    <pre id="log"></pre>
+  </section>
 
 <script>
-/* ---------- tiny DOM helpers ---------- */
-const $ = (sel, el=document) => el.querySelector(sel);
-const logPane = $('#log');
-function logLine(msg){
-  if(!logPane) return;
-  const t = new Date().toTimeString().slice(0,8);
-  logPane.textContent += `[${t}] ${msg}\n`;
-  logPane.scrollTop = logPane.scrollHeight;
-}
+/* -------- logger -------- */
+const logEl=document.getElementById('log');
+function log(...a){const s=a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' ');logEl.textContent+=s+'\n';logEl.scrollTop=logEl.scrollHeight}
 
-/* ---------- mirror console.log into Diagnostics ---------- */
-{
-  const orig = console.log.bind(console);
-  console.log = (...args)=>{
-    try { logLine(args.map(a => typeof a==='object' ? JSON.stringify(a) : String(a)).join(' ')); } catch {}
-    orig(...args);
-  };
-}
+/* -------- elements -------- */
+const stage=document.getElementById('stage');
+const portrait=document.getElementById('portrait');
+const mouth=document.getElementById('mouth');
+const widthSl=document.getElementById('widthSlider');
+const scaleSl=document.getElementById('scaleSlider');
+const widthVal=document.getElementById('widthVal');
+const scaleVal=document.getElementById('scaleVal');
+const fitBtn=document.getElementById('fitBtn');
+const statusEl=document.getElementById('status');
 
-/* ---------- elements ---------- */
-const portrait = $('#portrait');
-const mouth    = $('#mouth');
-const cross    = $('#crosshair');
+/* -------- saved anchor -------- */
+const anchorKey='emma-mouth-anchor';
+let anchor=JSON.parse(localStorage.getItem(anchorKey)||'{"x":0.5,"y":0.62}');
+function saveAnchor(){localStorage.setItem(anchorKey,JSON.stringify(anchor))}
+stage.addEventListener('click',e=>{
+  const r=stage.getBoundingClientRect();
+  anchor.x=(e.clientX-r.left)/r.width;
+  anchor.y=(e.clientY-r.top)/r.height;
+  saveAnchor(); positionMouth();
+  log(`[anchor] saved x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
+});
 
-const widthSlider = $('#widthSlider');
-const scaleSlider = $('#scaleSlider');
-const wVal = $('#wVal');
-const sVal = $('#sVal');
-
-const statusBadge = $('#status');
-const frameCountEl = $('#frameCount');
-const vuEl = $('#vu');
-
-/* ---------- load portrait (m.png -> fallback) and lock stage aspect ---------- */
-const stage = document.getElementById('stage');
-let fitMode = 'contain'; // 'contain' | 'cover'
-const fitBtn = document.getElementById('fitBtn');
+/* -------- portrait (your lowercase m.png) -------- */
+let fitMode='contain';
+fitBtn.onclick=()=>{fitMode=fitMode==='contain'?'cover':'contain';portrait.style.objectFit=fitMode;fitBtn.textContent=`Fit: ${fitMode}`};
 
 (function loadPortrait(){
-  const cand = ['/m.png','/Emma_EmotiKnow_Companion.png'];
-  (async ()=>{
-    for (const src of cand){
-      try{
-        await new Promise((res,rej)=>{
-          const img = new Image();
-          img.onload = ()=>res(src);
-          img.onerror = rej;
-          img.src = src+'?v='+Date.now();
-        });
-        portrait.src = src+'?v='+Date.now();
-        console.log(`[portrait] loaded ${src}`);
-
-        // Once the actual element loads, set stage aspect to the exact natural ratio
-        portrait.onload = ()=>{
-          const nw = portrait.naturalWidth || 1920;
-          const nh = portrait.naturalHeight || 1200;
-          // Make the stage match the image’s real aspect so the image never looks zoomed
-          stage.style.aspectRatio = `${nw} / ${nh}`;
-          // Set initial fit mode
-          portrait.style.objectFit = fitMode; // 'contain' or 'cover'
-          console.log(`[portrait] natural ${nw}×${nh} -> stage aspect set to ${nw}/${nh}`);
-        };
-
-        return;
-      }catch{}
-    }
-    console.log('[portrait] error — no image found');
-  })();
+  const src='/m.png';
+  portrait.onload=()=>{
+    const nw=portrait.naturalWidth||1920, nh=portrait.naturalHeight||1200;
+    stage.style.aspectRatio=`${nw} / ${nh}`;
+    portrait.style.objectFit=fitMode;
+    log(`[portrait] loaded ${src} natural ${nw}×${nh}`);
+    positionMouth();
+  };
+  portrait.onerror=()=>log(`[portrait] ERROR loading ${src} — check path`);
+  portrait.src=src+'?v='+Date.now();
 })();
 
-// Fit toggle (contain <-> cover)
-fitBtn?.addEventListener('click', ()=>{
-  fitMode = fitMode === 'contain' ? 'cover' : 'contain';
-  portrait.style.objectFit = fitMode;
-  fitBtn.textContent = `Fit: ${fitMode}`;
+/* -------- frames (all lowercase) -------- */
+const FRAMES=['f','p','g','i','l','o','u','v','say'];
+const mouthImgs={}; let loaded=0;
+FRAMES.forEach(n=>{
+  const img=new Image();
+  img.onload=()=>{mouthImgs[n]=img;loaded++; if(loaded===FRAMES.length) log(`[frames] loaded ${loaded}/${FRAMES.length}`)};
+  img.onerror=()=>log(`[frames] ERROR /mouth/${n}.png`);
+  img.src=`/mouth/${n}.png?v=${Date.now()}`;
 });
 
-/* ---------- load custom mouth frames from /public/mouth ---------- */
-const expected = [
-  ['f','F.png'],
-  ['p','P.png'],
-  ['g','G.png'],
-  ['i','I.png'],
-  ['l','L.png'],
-  ['o','O.png'],
-  ['v','V.png'],
-  ['u','U.png'],
-  ['say','Say.png']
-];
+/* -------- sliders -------- */
+function sync(){widthVal.textContent=`${widthSl.value} px`;scaleVal.textContent=`${scaleSl.value} %`}
+widthSl.oninput=()=>{sync();positionMouth()}; scaleSl.oninput=()=>{sync();positionMouth()}; sync();
 
-const frames = {};         // key -> HTMLImageElement
-let frameKeys = [];        // present keys in same order as expected
-let cycleIdx = 0;          // for demo cycling
-let cycleTimer = 0;
-
-/* preloader */
-(async function preloadFrames(){
-  let ok = 0;
-  for (const [key, file] of expected){
-    const src = `/mouth/${file}`;
-    const img = new Image();
-    try{
-      await new Promise((res,rej)=>{ img.onload = res; img.onerror = rej; img.src = src+'?v='+Date.now(); });
-      frames[key] = img;
-      ok++;
-      console.log(`[load] mouth ${key} ✓ (${img.naturalWidth}×${img.naturalHeight})`);
-    }catch{
-      // missing is fine
-    }
-  }
-  frameKeys = Object.keys(frames);
-  frameCountEl.textContent = String(frameKeys.length);
-  if (frameKeys.length === 0){
-    console.log('No /mouth/*.png found. Please upload your frames into public/mouth/.');
-  }
-})();
-
-/* ---------- anchor & sizing ---------- */
-let anchor = { x:null, y:null }; // page-space px (inside portrait rect)
-function portraitRect(){ return portrait.getBoundingClientRect(); }
-
-function loadAnchor(){
-  try{
-    const saved = localStorage.getItem('emma_mouth_anchor_v1');
-    if(saved){ anchor = JSON.parse(saved); }
-  }catch{}
-}
-function saveAnchor(){
-  try{ localStorage.setItem('emma_mouth_anchor_v1', JSON.stringify(anchor)); }catch{}
+/* -------- position mouth -------- */
+function positionMouth(){
+  if(!portrait.naturalWidth) return;
+  const r=stage.getBoundingClientRect();
+  const scale=Number(scaleSl.value)/100;
+  mouth.style.width=`${Number(widthSl.value)}px`;
+  mouth.style.left =`${anchor.x * r.width}px`;
+  mouth.style.top  =`${anchor.y * r.height}px`;
+  mouth.style.transform=`translate(-50%,-50%) scale(${scale})`;
 }
 
-function setCrosshair(){
-  if (anchor.x==null || anchor.y==null) { cross.hidden = true; return; }
-  const r = portraitRect();
-  const cx = anchor.x, cy = anchor.y;
-  cross.style.left = cx+'px';
-  cross.style.top  = cy+'px';
-  cross.hidden = false;
-}
+/* -------- quick frame cycler (visual check) -------- */
+let idx=0, timer=null;
+function startCycle(){ if(timer) return; timer=setInterval(()=>{const n=FRAMES[idx%FRAMES.length]; if(mouthImgs[n]) mouth.src=mouthImgs[n].src; idx++},200) }
+function stopCycle(){ clearInterval(timer); timer=null }
 
-/* default anchor (center-ish lower face) after portrait is measured */
-function ensureDefaultAnchor(){
-  const r = portraitRect();
-  if (r.width===0 || r.height===0) return;
-  if (anchor.x==null || anchor.y==null){
-    anchor.x = r.left + r.width*0.50;
-    anchor.y = r.top  + r.height*0.62;
-    saveAnchor();
-  }
-}
-
-/* clicking the stage sets new anchor */
-$('#stage').addEventListener('click', (e)=>{
-  const r = portraitRect();
-  if (!r.width) return;
-  // clamp inside portrait box
-  anchor.x = Math.max(r.left, Math.min(e.clientX, r.right));
-  anchor.y = Math.max(r.top , Math.min(e.clientY, r.bottom));
-  setCrosshair();
-  saveAnchor();
-  console.log(`[save] mouth: x=${(anchor.x - r.left)|0}, y=${(anchor.y - r.top)|0}`);
-});
-
-/* ---------- render mouth frame ---------- */
-function px(val){ return `${val}px`; }
-
-function renderFrame(key){
-  const img = frames[key];
-  if (!img) return;
-
-  // set source
-  mouth.src = img.src;
-
-  // width & scale
-  const targetW = parseInt(widthSlider.value,10);
-  const scale   = parseInt(scaleSlider.value,10)/100;
-
-  mouth.style.width = px(targetW);
-  mouth.style.transform = `translate(-50%,-50%) scale(${scale})`;
-.fit-toggle{margin-left:auto}
-  // anchor position
-  const r = portraitRect();
-  if (!r.width) return;
-
-  // anchor.x / anchor.y are page coordinates; convert to stage local (px from top/left of stage box)
-  const localX = anchor.x;
-  const localY = anchor.y;
-
-  mouth.style.left = px(localX - r.left);
-  mouth.style.top  = px(localY - r.top);
-}
-
-/* UI reflectors */
-function reflectUI(){
-  wVal.textContent = `${parseInt(widthSlider.value,10)} px`;
-  sVal.textContent = `${parseInt(scaleSlider.value,10)} %`;
-}
-
-/* ---------- simple frame cycler (for visual check) ---------- */
-function startCycler(){
-  if (cycleTimer) return;
-  if (frameKeys.length === 0) return;
-
-  cycleIdx = 0;
-  cycleTimer = setInterval(()=>{
-    renderFrame( frameKeys[cycleIdx % frameKeys.length] );
-    cycleIdx++;
-  }, 250);
-}
-
-function stopCycler(){
-  if (cycleTimer) clearInterval(cycleTimer);
-  cycleTimer = 0;
-}
-
-/* ---------- wire up UI ---------- */
-widthSlider.addEventListener('input', ()=>{ reflectUI(); renderFrame(frameKeys[cycleIdx % Math.max(frameKeys.length,1)]); });
-scaleSlider.addEventListener('input', ()=>{ reflectUI(); renderFrame(frameKeys[cycleIdx % Math.max(frameKeys.length,1)]); });
-
-$('#testBtn').addEventListener('click', ()=>{
-  const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAAABkYXRhAAAAAA=='); // tiny silent blip
-  a.play().catch(()=>{});
-  logLine('Test speaker: attempted to play a short sample.');
-});
-
-const startBtn = $('#startBtn');
-const stopBtn  = $('#stopBtn');
-
-startBtn.addEventListener('click', ()=>{
-  statusBadge.textContent = 'live';
-  statusBadge.style.background = '#1e3a6f';
-  // start demo cycler (until we wire phonemes)
-  startCycler();
-});
-
-stopBtn.addEventListener('click', ()=>{
-  statusBadge.textContent = 'ended';
-  statusBadge.style.background = '#21304d';
-  stopCycler();
-});
-
-/* ---------- initial boot ---------- */
-function boot(){
-  loadAnchor();
-  ensureDefaultAnchor();
-  setCrosshair();
-  reflectUI();
-
-  // render first available frame if any
-  if (frameKeys.length) renderFrame(frameKeys[0]);
-
-  // keep crosshair aligned on resize/zoom
-  const ro = new ResizeObserver(()=>{ setCrosshair(); renderFrame(frameKeys[cycleIdx % Math.max(frameKeys.length,1)]); });
-  ro.observe(document.body);
-
-  logLine('Ready. Click Start to preview lips cycling the custom frames. If you do not see lips, upload frames into public/mouth/.');
-}
-window.addEventListener('load', boot);
+document.getElementById('startBtn').onclick=()=>{statusEl.textContent='live';statusEl.style.background='#1f5e2e';startCycle()};
+document.getElementById('stopBtn').onclick =()=>{statusEl.textContent='idle';statusEl.style.background='';stopCycle()};
 </script>
 </body>
 </html>
