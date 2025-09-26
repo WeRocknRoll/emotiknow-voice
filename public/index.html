@@ -167,7 +167,11 @@ const statusBadge = $('#status');
 const frameCountEl = $('#frameCount');
 const vuEl = $('#vu');
 
-/* ---------- load portrait (m.png -> fallback) ---------- */
+/* ---------- load portrait (m.png -> fallback) and lock stage aspect ---------- */
+const stage = document.getElementById('stage');
+let fitMode = 'contain'; // 'contain' | 'cover'
+const fitBtn = document.getElementById('fitBtn');
+
 (function loadPortrait(){
   const cand = ['/m.png','/Emma_EmotiKnow_Companion.png'];
   (async ()=>{
@@ -181,12 +185,31 @@ const vuEl = $('#vu');
         });
         portrait.src = src+'?v='+Date.now();
         console.log(`[portrait] loaded ${src}`);
+
+        // Once the actual element loads, set stage aspect to the exact natural ratio
+        portrait.onload = ()=>{
+          const nw = portrait.naturalWidth || 1920;
+          const nh = portrait.naturalHeight || 1200;
+          // Make the stage match the image’s real aspect so the image never looks zoomed
+          stage.style.aspectRatio = `${nw} / ${nh}`;
+          // Set initial fit mode
+          portrait.style.objectFit = fitMode; // 'contain' or 'cover'
+          console.log(`[portrait] natural ${nw}×${nh} -> stage aspect set to ${nw}/${nh}`);
+        };
+
         return;
       }catch{}
     }
     console.log('[portrait] error — no image found');
   })();
 })();
+
+// Fit toggle (contain <-> cover)
+fitBtn?.addEventListener('click', ()=>{
+  fitMode = fitMode === 'contain' ? 'cover' : 'contain';
+  portrait.style.objectFit = fitMode;
+  fitBtn.textContent = `Fit: ${fitMode}`;
+});
 
 /* ---------- load custom mouth frames from /public/mouth ---------- */
 const expected = [
