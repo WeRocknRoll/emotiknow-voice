@@ -1,610 +1,103 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
-  <title>EmotiKnow — Emma (Voice Companion)</title>
+  <meta charset="UTF-8" />
+  <title>EmotiKnow — Emma</title>
   <style>
-    :root {
-      --bg: #0b0f14;
-      --card: #121821;
-      --ink: #e9f1ff;
-      --muted: #9fb2cf;
-      --brand: #7c91ff;
-      --accent: #60e3c1;
-      --danger: #ff7d7d;
-      --shadow: 0 10px 30px rgba(0,0,0,.35);
-      --radius: 14px;
-    }
-    * { box-sizing: border-box; }
-    html, body {
+    body {
       margin: 0;
-      height: 100%;
-      background: radial-gradient(1200px 700px at 40% -200px, #172335 0%, #0b0f14 55%, #0b0f14 100%);
-      color: var(--ink);
-      font: 500 16px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI,
-            Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji",
-            "Segoe UI Emoji", "Segoe UI Symbol";
-    }
-    h1 {
-      font-size: clamp(24px, 3.3vw, 36px);
-      letter-spacing: .2px;
-      margin: 24px 0 12px;
-      font-weight: 800;
-    }
-    main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 24px clamp(16px, 3vw, 28px) 64px;
-    }
-
-    .wrap {
-      display: grid;
-      grid-template-columns: 1.2fr .9fr;
-      gap: clamp(16px, 2.8vw, 28px);
-      align-items: start;
-    }
-    @media (max-width: 980px) {
-      .wrap { grid-template-columns: 1fr; }
-    }
-
-    .card {
-      background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 70%) border-box,
-                  linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.02)) padding-box;
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-
-    /* --- Portrait stage --- */
-    .stage {
-      position: relative;
-      overflow: hidden;
-      aspect-ratio: 16/10; /* matches 1920x1200 */
-      min-height: 420px;
-    }
-    .portrait {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      user-select: none;
-      -webkit-user-drag: none;
-      pointer-events: none;
-    }
-    /* the mouth overlay image */
-    .mouth {
-      position: absolute;
-      transform: translate(-50%, -50%);
-      filter: drop-shadow(0 0 2px rgba(0,0,0,.3));
-      pointer-events: none;
-      image-rendering: auto;
-    }
-    /* anchor crosshair (shown briefly on re-anchor) */
-    .anchor {
-      position: absolute;
-      left: 0; top: 0;
-      transform: translate(-50%, -50%);
-      width: 16px; height: 16px;
-      border-radius: 50%;
-      border: 2px solid rgba(255,255,255,.8);
-      box-shadow: 0 0 0 3px rgba(0,0,0,.35);
-      display: none;
-      pointer-events: none;
-    }
-
-    .controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 12px;
-      padding: 14px;
-      border-top: 1px solid rgba(255,255,255,.08);
-      background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(255,255,255,.02));
-    }
-    @media (max-width: 680px) { .controls { grid-template-columns: 1fr; } }
-
-    .control {
-      background: rgba(0,0,0,.15);
-      padding: 12px 12px 10px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.08);
-    }
-    .control label {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 12.5px;
-      color: var(--muted);
-      margin-bottom: 6px;
-      letter-spacing: .2px;
-    }
-    input[type="range"] { width: 100%; }
-
-    .bar {
+      background: #111;
+      color: #fff;
+      font-family: sans-serif;
       display: flex;
-      gap: 10px;
-      padding: 14px;
-      border-top: 1px solid rgba(255,255,255,.08);
-      background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(255,255,255,.02));
+      justify-content: center;
       align-items: center;
-      flex-wrap: wrap;
+      flex-direction: column;
+      height: 100vh;
     }
-
-    button, select {
-      appearance: none;
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
-      border: 1px solid rgba(255,255,255,.12);
-      color: var(--ink);
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-weight: 650;
-      letter-spacing: .2px;
-      cursor: pointer;
-      outline: none;
-      transition: .15s ease;
+    #container {
+      position: relative;
+      display: inline-block;
     }
-    button:hover, select:hover { border-color: rgba(255,255,255,.22); }
-    .primary {
-      background: linear-gradient(180deg, var(--brand), #566cff);
-      border-color: transparent;
-      color: white;
-      box-shadow: 0 7px 22px rgba(124,145,255,.35);
+    #portrait {
+      display: block;
+      max-width: 600px;
     }
-    .danger {
-      background: linear-gradient(180deg, rgba(255,75,75,.9), rgba(255,75,75,.75));
-      border-color: rgba(255,255,255,.06);
-      box-shadow: 0 7px 22px rgba(255,75,75,.28);
+    #mouth {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      transform-origin: center;
     }
-
-    /* --- Diagnostics --- */
-    .diag {
-      padding: 14px 14px 8px;
-      border-bottom: 1px solid rgba(255,255,255,.08);
+    #controls {
+      margin-top: 20px;
     }
-    .term {
-      padding: 12px 14px 18px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size: 13px;
-      color: #cfe2ff;
-      height: 430px;
-      overflow: auto;
-      background: repeating-linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.02) 28px, rgba(255,255,255,.03) 28px, rgba(255,255,255,.03) 56px);
-      border-radius: 0 0 var(--radius) var(--radius);
-    }
-    .muted { color: var(--muted); }
-
-    .tip { margin: 12px 14px 16px; color: var(--muted); font-size: 13px; }
-    .kv { opacity: .85; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>EmotiKnow — Emma (Voice Companion)</h1>
+  <h1>EmotiKnow — Emma (Voice Companion)</h1>
+  <div id="container">
+    <img id="portrait" src="m.png" alt="Emma portrait" />
+    <img id="mouth" src="" alt="mouth frame" />
+  </div>
 
-    <div class="wrap">
-      <!-- LEFT: Portrait card -->
-      <div class="card">
-        <div id="stage" class="stage">
-          <img id="portrait" class="portrait" src="/m.png" alt="Emma portrait" />
-          <!-- active mouth frame -->
-          <img id="mouth" class="mouth" alt="" />
-          <!-- anchor indicator -->
-          <div id="anchor" class="anchor"></div>
-        </div>
-
-        <div class="controls">
-          <div class="control">
-            <label>Target width <span class="kv" id="wKV">120 px</span></label>
-            <input id="wRange" type="range" min="46" max="260" step="2" value="120"/>
-          </div>
-          <div class="control">
-            <label>Scale % <span class="kv" id="sKV">100%</span></label>
-            <input id="sRange" type="range" min="60" max="180" step="1" value="100"/>
-          </div>
-          <div class="control">
-            <label>Gate (silence threshold) <span class="kv" id="gKV">0.07</span></label>
-            <input id="gRange" type="range" min="0" max="0.25" step="0.005" value="0.07"/>
-          </div>
-        </div>
-
-        <div class="bar">
-          <button id="btnStart" class="primary">Start</button>
-          <button id="btnHang" class="danger">Hang Up</button>
-
-          <select id="voiceSel" title="Voice">
-            <option value="shimmer" selected>Shimmer (female, bright)</option>
-            <option value="ballad">Ballad (feminine, lyrical)</option>
-            <option value="alloy">Alloy (neutral)</option>
-            <option value="echo">Echo</option>
-            <option value="ash">Ash</option>
-            <option value="sage">Sage</option>
-            <option value="marin">Marin</option>
-            <option value="verse">Verse</option>
-            <option value="coral">Coral</option>
-            <option value="cedar">Cedar</option>
-          </select>
-        </div>
-
-        <div class="tip">
-          Tip: Click the portrait to re-anchor the lips; use the sliders to size & scale.
-          If you don’t hear Emma, click <b>Hang Up</b> then <b>Start</b> again (sometimes autoplay is blocked).
-        </div>
-      </div>
-
-      <!-- RIGHT: Diagnostics -->
-      <div class="card">
-        <div class="diag">
-          <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
-            <div>
-              <div style="font-weight:800">Diagnostics</div>
-              <div class="muted" style="font-size:13px">
-                <span>model:</span>
-                <code id="modelKV">gpt-4o-mini-realtime-preview</code>
-                •
-                <span>VU:</span> <code id="vuKV">0.00</code>
-                •
-                <span>phoneme:</span> <code id="phKV">—</code>
-                •
-                <span>frames:</span> <code id="framesKV">0</code>
-              </div>
-            </div>
-          </div>
-        </div>
-        <pre id="term" class="term"></pre>
-      </div>
-    </div>
-  </main>
+  <div id="controls">
+    <label>Target width:
+      <input id="widthSlider" type="range" min="50" max="400" value="200" />
+    </label>
+    <label>Scale %:
+      <input id="scaleSlider" type="range" min="50" max="300" value="100" />
+    </label>
+  </div>
 
   <script>
-    // --------------------------
-    // Utilities
-    // --------------------------
-    const $ = (sel) => document.querySelector(sel);
-    const log = (msg) => {
-      const t = new Date().toLocaleTimeString();
-      term.textContent += `[${t}] ${msg}\n`;
-      term.scrollTop = term.scrollHeight;
-    };
+    const mouth = document.getElementById("mouth");
+    const portrait = document.getElementById("portrait");
+    const widthSlider = document.getElementById("widthSlider");
+    const scaleSlider = document.getElementById("scaleSlider");
 
-    // Elements
-    const stage    = $('#stage');
-    const portrait = $('#portrait');
-    const mouthImg = $('#mouth');
-    const anchorEl = $('#anchor');
-
-    const wRange   = $('#wRange');
-    const sRange   = $('#sRange');
-    const gRange   = $('#gRange');
-    const wKV      = $('#wKV');
-    const sKV      = $('#sKV');
-    const gKV      = $('#gKV');
-
-    const btnStart = $('#btnStart');
-    const btnHang  = $('#btnHang');
-    const voiceSel = $('#voiceSel');
-
-    const modelKV  = $('#modelKV');
-    const vuKV     = $('#vuKV');
-    const phKV     = $('#phKV');
-    const framesKV = $('#framesKV');
-    const term     = $('#term');
-
-    // --------------------------
-    // Assets & frame management
-    // --------------------------
-    const FRAME_ORDER = ['m','f','p','g','l','v','o','i','u','say'];
-    const frames = {};
-    let framesLoaded = 0;
-
-    function preloadFrames() {
-      framesLoaded = 0;
-      FRAME_ORDER.forEach(name => {
-        const img = new Image();
-        img.onload = () => {
-          frames[name] = img;
-          framesLoaded++;
-          framesKV.textContent = framesLoaded;
-          log(`[load] mouth ${name} ✓ (${img.naturalWidth}×${img.naturalHeight}) bbox ${img.naturalWidth}×${img.naturalHeight}`);
-          if (name === 'm') mouthImg.src = img.src; // default
-        };
-        img.onerror = () => log(`[warn] failed to load /mouth/${name}.png`);
-        img.src = `/mouth/${name}.png`;
-      });
-    }
-
-    // If /mouth/ isn't there, show a helpful hint
-    async function verifyMouthFolder() {
-      try {
-        // small HEAD request to /mouth/m.png; if 404, the server likely doesn't see the folder
-        const r = await fetch('/mouth/m.png', { method: 'HEAD' });
-        if (!r.ok) {
-          log('No /mouth/*.png found. Please upload your frames into public/mouth/.');
-        }
-      } catch (e) {
-        log('No /mouth/*.png found. Please upload your frames into public/mouth/.');
-      }
-    }
-
-    // --------------------------
-    // Sizing & anchoring
-    // --------------------------
-    let mouthCenter = { x: 0.5, y: 0.5 }; // in 0..1 relative to portrait
-    let targetWidthPx = parseInt(wRange.value, 10);
-    let globalScale   = parseInt(sRange.value, 10) / 100;
-    let gate          = parseFloat(gRange.value);
-
-    // Update UI kvs
-    function updateKVs() {
-      wKV.textContent = `${targetWidthPx} px`;
-      sKV.textContent = `${Math.round(globalScale*100)}%`;
-      gKV.textContent = `${gate.toFixed(3)}`;
-    }
-    updateKVs();
-
-    // Compute CSS position for mouth center & width
-    function layoutMouth() {
-      if (!portrait.complete) return;
-      const rect = stage.getBoundingClientRect();
-      // portrait is object-fit:contain; compute its rendered box inside stage
-      const imgAR = portrait.naturalWidth / portrait.naturalHeight;
-      const boxAR = rect.width / rect.height;
-
-      let renderW, renderH, offsetX, offsetY;
-      if (boxAR > imgAR) {
-        // portrait height fills
-        renderH = rect.height;
-        renderW = renderH * imgAR;
-        offsetX = (rect.width - renderW)/2;
-        offsetY = 0;
-      } else {
-        // portrait width fills
-        renderW = rect.width;
-        renderH = renderW / imgAR;
-        offsetX = 0;
-        offsetY = (rect.height - renderH)/2;
-      }
-      // center in pixels
-      const cx = offsetX + mouthCenter.x * renderW;
-      const cy = offsetY + mouthCenter.y * renderH;
-
-      // final width in CSS pixels
-      const cssW = targetWidthPx * globalScale;
-      mouthImg.style.left = `${cx}px`;
-      mouthImg.style.top  = `${cy}px`;
-      mouthImg.style.width = `${cssW}px`;
-
-      // flash anchor briefly
-      if (anchorEl._flash) {
-        anchorEl.style.left = `${cx}px`;
-        anchorEl.style.top  = `${cy}px`;
-        anchorEl.style.display = 'block';
-        clearTimeout(anchorEl._flash);
-        anchorEl._flash = setTimeout(() => anchorEl.style.display = 'none', 500);
-      }
-    }
-
-    // Re-anchor by clicking on the portrait
-    stage.addEventListener('click', (e) => {
-      const rect = stage.getBoundingClientRect();
-      // compute portrait render box as in layoutMouth()
-      const imgAR = portrait.naturalWidth / portrait.naturalHeight;
-      const boxAR = rect.width / rect.height;
-      let renderW, renderH, offsetX, offsetY;
-      if (boxAR > imgAR) {
-        renderH = rect.height;
-        renderW = renderH * imgAR;
-        offsetX = (rect.width - renderW)/2;
-        offsetY = 0;
-      } else {
-        renderW = rect.width;
-        renderH = renderW / imgAR;
-        offsetX = 0;
-        offsetY = (rect.height - renderH)/2;
-      }
-      const x = (e.clientX - rect.left - offsetX) / renderW;
-      const y = (e.clientY - rect.top  - offsetY) / renderH;
-      // clamp
-      mouthCenter.x = Math.max(0, Math.min(1, x));
-      mouthCenter.y = Math.max(0, Math.min(1, y));
-      anchorEl._flash = true;
-      layoutMouth();
-      // persist
-      localStorage.setItem('ek_mouth_center', JSON.stringify(mouthCenter));
-      log(`Saved mouth: x=${(mouthCenter.x*portrait.naturalWidth).toFixed(3)}, y=${(mouthCenter.y*portrait.naturalHeight).toFixed(3)}`);
+    // Mouth frames
+    const frames = ["f","g","i","l","o","p","say","u"];
+    const mouthImgs = {};
+    frames.forEach(f => {
+      const img = new Image();
+      img.src = `mouth/${f}.png`;
+      mouthImgs[f] = img;
     });
 
-    // Wheel changes target width quickly (nice for fine-tune)
-    stage.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      targetWidthPx = Math.max(46, Math.min(260, targetWidthPx + (e.deltaY > 0 ? -4 : 4)));
-      wRange.value = targetWidthPx;
-      updateKVs();
-      layoutMouth();
-    }, { passive:false });
+    // Default positioning
+    let mouthX = portrait.width / 2;
+    let mouthY = portrait.height / 1.6;
+    let targetWidth = parseInt(widthSlider.value);
+    let scale = parseInt(scaleSlider.value) / 100;
 
-    window.addEventListener('resize', layoutMouth);
-    portrait.addEventListener('load', layoutMouth);
-    wRange.addEventListener('input', () => {
-      targetWidthPx = parseInt(wRange.value, 10);
-      updateKVs(); layoutMouth();
+    function updateMouthFrame(f) {
+      if (!mouthImgs[f]) return;
+      mouth.src = mouthImgs[f].src;
+      mouth.style.width = `${targetWidth}px`;
+      mouth.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      mouth.style.left = `${mouthX}px`;
+      mouth.style.top = `${mouthY}px`;
+    }
+
+    // Example: cycle through frames every 300ms
+    let idx = 0;
+    setInterval(() => {
+      updateMouthFrame(frames[idx % frames.length]);
+      idx++;
+    }, 300);
+
+    // Adjust width/scale from sliders
+    widthSlider.oninput = () => { targetWidth = parseInt(widthSlider.value); };
+    scaleSlider.oninput = () => { scale = parseInt(scaleSlider.value) / 100; };
+
+    // Click portrait to re-anchor mouth
+    portrait.addEventListener("click", e => {
+      const rect = portrait.getBoundingClientRect();
+      mouthX = e.clientX - rect.left;
+      mouthY = e.clientY - rect.top;
     });
-    sRange.addEventListener('input', () => {
-      globalScale = parseInt(sRange.value, 10)/100;
-      updateKVs(); layoutMouth();
-    });
-    gRange.addEventListener('input', () => {
-      gate = parseFloat(gRange.value);
-      updateKVs();
-    });
-
-    // restore saved center
-    try {
-      const saved = JSON.parse(localStorage.getItem('ek_mouth_center') || 'null');
-      if (saved && typeof saved.x==='number' && typeof saved.y==='number') mouthCenter = saved;
-    } catch(_) {}
-
-    // --------------------------
-    // Mouth animation
-    // --------------------------
-    let activeFrame = 'm';
-    function setFrame(name) {
-      const img = frames[name] || frames['m'];
-      if (!img) return;
-      if (activeFrame !== name) {
-        mouthImg.src = img.src;
-        activeFrame = name;
-      }
-    }
-
-    // Very light envelope follower for VU fallback
-    let vu = 0;
-    let vuDecay = 0.92;
-    function updateVU(sample) {
-      vu = Math.max(sample, vu * vuDecay);
-      vuKV.textContent = vu.toFixed(2);
-    }
-
-    // map phoneme → frame (rough)
-    function mapPhonemeToFrame(ph) {
-      ph = (ph || '').toLowerCase();
-      if (!ph) return 'm';
-      if (/[fv]/.test(ph)) return 'f';
-      if (/p|b|m/.test(ph)) return 'p';
-      if (/l/.test(ph)) return 'l';
-      if (/g|k/.test(ph)) return 'g';
-      if (/o|ɔ|ɑ|ʌ/.test(ph)) return 'o';
-      if (/i|ɪ|ee/.test(ph)) return 'i';
-      if (/u|ʊ|oo/.test(ph)) return 'u';
-      if (/v/.test(ph)) return 'v';
-      if (/s|z|ʃ|ʒ|t͡s|t͡ʃ/.test(ph)) return 'say';
-      return 'm';
-    }
-
-    // pick frame from VU (simplified)
-    function pickFrameFromVU() {
-      if (vu < gate) return 'm';
-      if (vu < gate + 0.03) return 'i';
-      if (vu < gate + 0.06) return 'o';
-      if (vu < gate + 0.09) return 'say';
-      return 'u';
-    }
-
-    // animation tick (60fps)
-    let rafId = 0;
-    function tick() {
-      // if no phoneme in last 100ms, fallback to VU
-      if (Date.now() - lastPhonemeAt > 100) {
-        setFrame(pickFrameFromVU());
-      }
-      rafId = requestAnimationFrame(tick);
-    }
-
-    // --------------------------
-    // Realtime voice (OpenAI)
-    // --------------------------
-    let pc, micStream, remoteStream, ws;
-    let lastPhonemeAt = 0;
-
-    async function connect() {
-      const voice = voiceSel.value;
-      modelKV.textContent = 'gpt-4o-mini-realtime-preview';
-      // Create local peer connection
-      pc = new RTCPeerConnection();
-      remoteStream = new MediaStream();
-      const audio = new Audio();
-      audio.autoplay = true;
-      audio.srcObject = remoteStream;
-
-      pc.ontrack = (e) => {
-        e.streams[0].getAudioTracks().forEach(t => remoteStream.addTrack(t));
-      };
-      pc.oniceconnectionstatechange = () => log(`pc state: ${pc.connectionState}`);
-
-      // mic
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStream.getTracks().forEach(t => pc.addTrack(t, micStream));
-
-      // simple VU envelope
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const src = ctx.createMediaStreamSource(micStream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      src.connect(analyser);
-
-      const vuBuf = new Uint8Array(analyser.frequencyBinCount);
-      (function vuLoop() {
-        analyser.getByteTimeDomainData(vuBuf);
-        let peak = 0;
-        for (let i=0;i<vuBuf.length;i++) {
-          const v = (vuBuf[i]-128)/128;
-          peak = Math.max(peak, Math.abs(v));
-        }
-        updateVU(peak);
-        requestAnimationFrame(vuLoop);
-      })();
-
-      // datachannel for phonemes (if server emits them)
-      const dc = pc.createDataChannel('oai-events');
-      dc.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === 'phoneme') {
-            const frame = mapPhonemeToFrame(msg.value);
-            phKV.textContent = msg.value;
-            lastPhonemeAt = Date.now();
-            setFrame(frame);
-          }
-        } catch {}
-      };
-
-      // SDP offer to your token endpoint
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const tokenRes = await fetch(`/api/realtime-session?voice=${encodeURIComponent(voice)}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/sdp' },
-        body: offer.sdp
-      });
-      if (!tokenRes.ok) throw new Error('Token endpoint error');
-      const answerSDP = await tokenRes.text();
-      await pc.setRemoteDescription({ type:'answer', sdp: answerSDP });
-
-      log('Session established. Speak anytime.');
-      // start animation
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(tick);
-    }
-
-    function hangup() {
-      try { cancelAnimationFrame(rafId); } catch {}
-      try { pc && pc.close(); } catch {}
-      try { micStream && micStream.getTracks().forEach(t=>t.stop()); } catch {}
-      pc = null; micStream=null; remoteStream=null;
-      setFrame('m');
-      phKV.textContent = '—';
-      vuKV.textContent = '0.00';
-      log('Call ended. (user)');
-    }
-
-    // --------------------------
-    // Wire up UI
-    // --------------------------
-    btnStart.addEventListener('click', connect);
-    btnHang.addEventListener('click', hangup);
-
-    // Init
-    (async function init() {
-      await verifyMouthFolder();
-      preloadFrames();
-      // if you already measured her mouth on this image once,
-      // your x/y were saved and will be applied here:
-      layoutMouth();
-      // brief hint: flash the anchor at the saved spot
-      anchorEl._flash = true; layoutMouth();
-      setTimeout(()=>anchorEl.style.display='none', 600);
-    })();
   </script>
 </body>
 </html>
