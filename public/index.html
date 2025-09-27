@@ -224,28 +224,3 @@
       setStatus('error'); log('[ERROR]', e.message||e);
       try{ pc?.close(); }catch{} pc=null;
     }
-  }
-  function hangUp(){
-    stopLip();
-    if (pc){ try{pc.close()}catch{} pc=null; }
-    if (micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
-    setStatus('ended'); log('[call] ended.');
-  }
-
-  startBtn.onclick = startCall;
-  hangBtn.onclick  = hangUp;
-  testBtn.onclick  = async () => {
-    // unlock audio path with a short beep (helps autoplay)
-    try{
-      const ac = new (window.AudioContext||window.webkitAudioContext)();
-      const o = ac.createOscillator(); const g = ac.createGain();
-      o.frequency.value=880; g.gain.value=0.03; o.connect(g).connect(ac.destination);
-      o.start(); setTimeout(()=>{o.stop(); ac.close();}, 200);
-      log('[speaker] ping');
-    }catch{}
-  };
-
-})();
-</script>
-</body>
-</html>
