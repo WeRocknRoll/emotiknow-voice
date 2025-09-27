@@ -1,57 +1,61 @@
 // /api/realtime-session.js
-// Vercel Node runtime (not Edge). Proxies the browser's SDP offer to OpenAI
-// and returns the SDP answer as plain text.
-
-export const config = { runtime: "nodejs" };
-
 export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return res.status(405).json({ error: "Method Not Allowed" });
-    }
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  const MODEL = "gpt-4o-mini-realtime-preview";
 
-    const offerSdp = await req.text(); // SDP offer from the browser (text/plain)
-    if (!offerSdp || !offerSdp.includes("\nv=")) {
-      return res.status(400).json({ error: "Bad SDP offer" });
-    }
-
-    // Optional query params: ?model=gpt-4o-mini-realtime-preview&voice=shimmer
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const model = url.searchParams.get("model") || "gpt-4o-mini-realtime-preview";
-    const voice = url.searchParams.get("voice") || "shimmer";
-
-    const openaiResp = await fetch(
-      `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}&voice=${encodeURIComponent(voice)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/sdp",
-        },
-        body: offerSdp,
-      }
-    );
-
-    const answerSdp = await openaiResp.text();
-
-    if (!openaiResp.ok || !answerSdp.includes("\nv=")) {
-      // If OpenAI returned JSON (error), forward it so you can see it in logs
-      try {
-        const maybeJson = JSON.parse(answerSdp);
-        return res.status(openaiResp.status).json(maybeJson);
-      } catch {
-        return res
-          .status(openaiResp.status)
-          .send(answerSdp || "Failed to fetch SDP answer from OpenAI.");
-      }
-    }
-
-    // Return *plain text* SDP, or the browser will fail with “missing_sdp”
-    res.setHeader("Content-Type", "application/sdp");
-    res.status(200).send(answerSdp);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error", detail: String(err) });
+  if (!OPENAI_KEY) {
+    res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+    return;
   }
+
+  // GET => hand back a simple token shape (no `.value`)
+  if (req.method === "GET") {
+    res.status(200).json({ client_secret: OPENAI_KEY });
+    return;
+  }
+
+  // POST with application/sdp => forward offer to OpenAI, return answer
+  if (req.method === "POST") {
+    try {
+      if (!req.headers["content-type"]?.includes("application/sdp")) {
+        return res.status(400).send("Expected Content-Type: application/sdp");
+      }
+
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const offerSdp = Buffer.concat(chunks).toString("utf8");
+
+      const r = await fetch(
+        `https://api.openai.com/v1/realtime?model=${encodeURIComponent(MODEL)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENAI_KEY}`,
+            "Content-Type": "application/sdp",
+            "OpenAI-Beta": "realtime=v1",
+          },
+          body: offerSdp,
+        }
+      );
+
+      const answerSdp = await r.text();
+      if (!r.ok || !answerSdp.includes("\nv=")) {
+        // Try to forward JSON error if present
+        try {
+          const j = JSON.parse(answerSdp);
+          return res.status(r.status).json(j);
+        } catch {
+          return res.status(r.status).send(answerSdp || "Realtime SDP error");
+        }
+      }
+      res.setHeader("Content-Type", "application/sdp");
+      res.status(200).send(answerSdp);
+    } catch (e) {
+      res.status(500).send(String(e?.message || e));
+    }
+    return;
+  }
+
+  res.setHeader("Allow", "GET, POST");
+  res.status(405).send("Method Not Allowed");
 }
