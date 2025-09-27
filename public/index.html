@@ -1,222 +1,385 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>EmotiKnow — Emma (Voice Companion)</title>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
-<style>
-  :root{--bg:#0f1117;--panel:#151b23;--ink:#e6e8ef;--muted:#9aa3b2;--accent:#8ab4ff;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444}
-  html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);font:500 15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  .wrap{max-width:1200px;margin:24px auto;padding:0 16px;display:grid;gap:16px}
-  .row{display:grid;gap:16px;grid-template-columns:1.2fr .9fr} @media(max-width:980px){.row{grid-template-columns:1fr}}
-  .panel{background:var(--panel);border:1px solid #202937;border-radius:14px;padding:16px}
-  .stage{position:relative;aspect-ratio:16/10;background:#0b0e13;border-radius:10px;overflow:hidden;display:grid;place-items:center}
-  #portrait{max-width:100%;max-height:100%;object-fit:contain;display:block;user-select:none;-webkit-user-drag:none}
-  #mouth{position:absolute;display:none;width:260px;transform:translate(-50%,-50%) scale(1);pointer-events:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
-  video{display:none!important} /* belt & suspenders: never show any <video> */
-  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  .btn{background:#1d2533;border:1px solid #2a3546;color:var(--ink);padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:700}
-  .btn.primary{background:#3062ff;border-color:#3062ff;color:white}
-  .btn:disabled{opacity:.55;cursor:not-allowed}
-  .slider{display:flex;gap:8px;align-items:center} input[type=range]{width:180px}
-  .diag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap;height:360px;overflow:auto;background:#0b0e16;border:1px solid #21273a;border-radius:10px;padding:12px}
-  .muted{color:var(--muted)}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EmotiKnow — Emma (Voice Companion)</title>
+  <style>
+    :root{
+      --bg:#0f1117; --panel:#151b23; --ink:#e6e8ef; --accent:#8ab4ff; --muted:#9aa3b2;
+      --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--ink); background:var(--bg);
+      font:500 15px/1.45 ui-sans-serif, system-ui, Segoe UI, Roboto, "Helvetica Neue";
+      display:grid; place-items:start center;
+    }
+    .wrap{width:min(1200px,100%); padding:20px}
+    h1{font-weight:800; letter-spacing:.2px; margin:6px 0 14px}
+    .row{display:grid; grid-template-columns:1fr .9fr; gap:16px}
+    @media (max-width:980px){ .row{grid-template-columns:1fr} }
+    .panel{
+      background:var(--panel); border:1px solid #202937; border-radius:14px; padding:14px;
+      box-shadow:0 6px 20px rgba(0,0,0,.25);
+    }
+    .stage{
+      aspect-ratio: 16/10; /* 1920x1200 */
+      width:100%; background:#000; border-radius:10px; overflow:hidden;
+      position:relative; display:grid; place-items:center;
+    }
+    .portrait{
+      max-width:none; width:100%; height:100%; object-fit:contain;
+      pointer-events:none; user-select:none;
+    }
+    /* Mouth overlay */
+    #mouth{
+      position:absolute; left:50%; top:50%;
+      transform:translate(-50%,-50%);
+      filter: saturate(1.1) contrast(1.05);
+      pointer-events:none; user-select:none;
+    }
+    .tip{font-size:13px; color:var(--muted)}
+    .controls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px}
+    .controls .group{display:flex; align-items:center; gap:10px}
+    .btn{
+      background:#1f2937; border:1px solid #334155; color:var(--ink);
+      padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:700;
+    }
+    .btn.primary{ background:#2446ff; border-color:#2446ff }
+    .btn:disabled{opacity:.6; cursor:not-allowed}
+    input[type="range"]{ width:200px }
+    pre{
+      background:#0b0e14; color:#cbd5e1; border:1px solid #1f2937;
+      border-radius:10px; padding:10px; overflow:auto; max-height:360px;
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .badge{padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800}
+    .ok{background:rgba(16,185,129,.2); color:#10b981}
+    .err{background:rgba(239,68,68,.2); color:#ef4444}
+    .idle{background:rgba(148,163,184,.2); color:#94a3b8}
+    .meter{height:8px; width:120px; background:#1e293b; border-radius:100px; overflow:hidden}
+    .meter > i{display:block; height:100%; width:0; background:#22c55e}
+    .mini{font-size:12px; color:#9aa3b2}
+  </style>
 </head>
 <body>
-<script>
-  // Kill any stray <video> if an old cached build sneaks in
-  (function(){const kill=()=>document.querySelectorAll('video').forEach(v=>v.remove());kill();setTimeout(kill,150)})();
-</script>
+  <div class="wrap">
+    <h1>EmotiKnow — Emma (Voice Companion) <span id="status" class="badge idle">idle</span></h1>
 
-<div class="wrap">
-  <h1>EmotiKnow — Emma (Voice Companion)</h1>
-  <div class="row">
-    <div class="panel">
-      <div class="stage" id="stage">
-        <img id="portrait" src="/m.png?v=6" alt="portrait" />
-        <img id="mouth" alt="mouth" />
-        <audio id="remoteAudio" autoplay playsinline></audio>
-      </div>
-      <div class="controls">
-        <button id="startBtn" class="btn primary">Start</button>
-        <button id="hangBtn"  class="btn">Hang Up</button>
-        <button id="testBtn"  class="btn">Test speaker</button>
-        <span class="muted" id="status">idle</span>
-        <div class="slider" style="margin-left:auto">
-          <label>Target width</label><input id="wRange" type="range" min="80" max="700" value="260"/><span id="wOut">260 px</span>
+    <div class="row">
+      <!-- Left: Portrait + mouth overlay -->
+      <div class="panel">
+        <div id="stage" class="stage" title="Click Emma’s real mouth once to anchor">
+          <!-- Your 1920x1200 portrait -->
+          <img id="portrait" class="portrait" src="/m.png" alt="portrait" />
+          <!-- Overlay that we animate -->
+          <img id="mouth" alt="mouth" />
         </div>
-        <div class="slider">
-          <label>Scale</label><input id="sRange" type="range" min="70" max="160" value="100"/><span id="sOut">100 %</span>
+
+        <div class="controls">
+          <button id="startBtn" class="btn primary">Start</button>
+          <button id="hangBtn" class="btn">Hang Up</button>
+          <button id="testBtn" class="btn">Test speaker</button>
+
+          <div class="group">
+            <span class="mini">Scale</span>
+            <input id="scaleSlider" type="range" min="60" max="200" value="100" />
+            <span class="mini" id="scaleLabel">100%</span>
+          </div>
+          <div class="group">
+            <span class="mini">Target width</span>
+            <input id="widthSlider" type="range" min="60" max="800" value="260" />
+            <span class="mini" id="widthLabel">260 px</span>
+          </div>
+
+          <div class="group">
+            <span class="mini">VU</span>
+            <div class="meter"><i id="vu"></i></div>
+          </div>
         </div>
+
+        <p class="tip">
+          Tip: Click Emma’s real mouth once to anchor the overlay. The position & sizing are saved per browser.
+        </p>
       </div>
-      <p class="muted" style="margin:.5rem 0 0">
-        Tip: Click Emma’s real mouth once to anchor the overlay. The position & sizing are saved per browser.
-      </p>
-    </div>
-    <div class="panel" style="display:grid;grid-template-rows:auto 1fr;gap:8px;min-height:420px">
-      <div class="muted">Diagnostics</div>
-      <div id="log" class="diag"></div>
+
+      <!-- Right: Diagnostics -->
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <strong>Diagnostics</strong>
+          <span class="mini">model: gpt-4o-mini-realtime-preview</span>
+        </div>
+        <pre id="log"></pre>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-(() => {
-  const $ = s => document.querySelector(s);
-  const logEl = $('#log'); const statusEl = $('#status');
-  const log = m => { const t = (typeof m==='string')?m:JSON.stringify(m); logEl.textContent += t + "\n"; logEl.scrollTop = logEl.scrollHeight; };
-  const setStatus = s => statusEl.textContent = s;
+  <script>
+    /**********************
+     * tiny logger
+     **********************/
+    const $log = document.getElementById('log');
+    const log = (...a) => ($log.textContent += a.join(' ') + '\n');
+    const setStatus = (text, cls='idle') => {
+      const el = document.getElementById('status');
+      el.textContent = text;
+      el.className = 'badge ' + cls;
+    };
 
-  const stage = $('#stage'), portrait = $('#portrait'), mouth = $('#mouth'), remoteAudio = $('#remoteAudio');
-  const startBtn = $('#startBtn'), hangBtn = $('#hangBtn'), testBtn = $('#testBtn');
-  const wRange = $('#wRange'), sRange = $('#sRange'), wOut = $('#wOut'), sOut = $('#sOut');
+    /**********************
+     * elements & state
+     **********************/
+    const portrait = document.getElementById('portrait');
+    const mouthImg = document.getElementById('mouth');
+    const stage = document.getElementById('stage');
 
-  // Load mouth frames (optional). Put lowercase PNGs in public/mouth/
-  const frameNames = ['f','g','i','l','m','o','p','say','u','v'];
-  const frames = {};
-  (async () => {
-    let ok = 0;
-    await Promise.all(frameNames.map(n => new Promise(res => {
-      const img = new Image();
-      img.onload = () => { frames[n]=img; ok++; res(); };
-      img.onerror = () => { log(`[frames] missing /mouth/${n}.png`); res(); };
-      img.src = `/mouth/${n}.png?v=6`;
-    })));
-    if (ok) { mouth.style.display = 'block'; mouth.src = (frames['m']||Object.values(frames)[0]).src; }
-    log(`[frames] loaded ${ok}/${frameNames.length}`);
-  })();
+    const scaleSlider = document.getElementById('scaleSlider');
+    const widthSlider = document.getElementById('widthSlider');
+    const scaleLabel = document.getElementById('scaleLabel');
+    const widthLabel = document.getElementById('widthLabel');
+    const vuBar = document.getElementById('vu');
 
-  // Anchor state (normalized to stage)
-  let anchor = (() => { try { return JSON.parse(localStorage.getItem('emma_anchor')); } catch { return null; } })() || { x:.52, y:.59 };
-  let mouthW = parseInt(wRange.value,10), scale = parseInt(sRange.value,10)/100;
-  wOut.textContent = `${mouthW} px`; sOut.textContent = `${Math.round(scale*100)} %`;
+    const startBtn = document.getElementById('startBtn');
+    const hangBtn  = document.getElementById('hangBtn');
+    const testBtn  = document.getElementById('testBtn');
 
-  function layoutMouth() {
-    const rect = stage.getBoundingClientRect();
-    const x = rect.left + rect.width  * anchor.x;
-    const y = rect.top  + rect.height * anchor.y;
-    mouth.style.width = `${mouthW}px`;
-    mouth.style.left  = `${x}px`;
-    mouth.style.top   = `${y}px`;
-    mouth.style.transform = `translate(-50%,-50%) scale(${scale})`;
-  }
-  window.addEventListener('resize', layoutMouth);
-  stage.addEventListener('click', (e) => {
-    const r = stage.getBoundingClientRect();
-    anchor = { x: (e.clientX-r.left)/r.width, y: (e.clientY-r.top)/r.height };
-    localStorage.setItem('emma_anchor', JSON.stringify(anchor));
-    log(`[anchor] saved x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
-    layoutMouth();
-  });
-  wRange.addEventListener('input', () => { mouthW = parseInt(wRange.value,10); wOut.textContent = `${mouthW} px`; layoutMouth(); });
-  sRange.addEventListener('input', () => { scale = parseInt(sRange.value,10)/100; sOut.textContent = `${Math.round(scale*100)} %`; layoutMouth(); });
+    let pc = null;
+    let micStream = null;
+    let remoteAudio = null;
+    let audioCtx = null;
+    let analyser = null;
+    let sourceNode = null;
+    let raf = 0;
 
-  // tiny VU-driven frame swap (from remote audio)
-  let ac, analyser, data;
-  function startLipVU(stream) {
-    try {
-      ac = new (window.AudioContext||window.webkitAudioContext)();
-      const src = ac.createMediaStreamSource(stream);
-      analyser = ac.createAnalyser(); analyser.fftSize = 2048;
-      src.connect(analyser); data = new Uint8Array(analyser.fftSize);
-      let last = 0;
-      const tick = (t) => {
-        if (!analyser) return;
-        analyser.getByteTimeDomainData(data);
-        let sum=0; for(let i=0;i<data.length;i++){ const v=(data[i]-128)/128; sum+=v*v; }
-        const rms = Math.sqrt(sum/data.length); // ~0..0.3
-        // pick a frame by loudness
-        let f = 'l'; if (rms>0.14) f='o'; else if (rms>0.08) f='say'; else if (rms>0.04) f='v';
-        if (frames[f] && t-last>45) { mouth.src = frames[f].src; last=t; }
-        layoutMouth();
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    } catch(e) { log('[lip] analyser error: ' + (e?.message||e)); }
-  }
-  function stopLipVU(){ try { analyser = null; ac?.close(); } catch{} }
+    // lip frames you uploaded (all lowercase)
+    const frameNames = ['m','f','p','g','i','l','o','v','say'];
+    const frames = new Map(); // name -> HTMLImageElement
+    let currentFrame = 'm';
 
-  // WebRTC
-  let pc = null, micStream = null;
-  async function startCall(){
-    try {
-      setStatus('connecting'); log('[mic] requesting…');
-      micStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+    // persistent anchor (relative position in stage rect)
+    const anchorKey = 'emma-mouth-anchor-v1';
+    let anchor = JSON.parse(localStorage.getItem(anchorKey) || 'null'); // {x:0..1, y:0..1}
+
+    // UI defaults
+    widthSlider.value = localStorage.getItem('targetWidth') || '260';
+    scaleSlider.value = localStorage.getItem('scalePct') || '100';
+    widthLabel.textContent = `${widthSlider.value} px`;
+    scaleLabel.textContent = `${scaleSlider.value}%`;
+
+    /**********************
+     * load frames
+     **********************/
+    async function preloadFrames() {
+      const jobs = frameNames.map(n => new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => { frames.set(n, im); resolve(); };
+        im.onerror = reject;
+        im.src = `/mouth/${n}.png`;
+      }));
+      await Promise.all(jobs);
+      // start from neutral
+      mouthImg.src = frames.get('m').src;
+      log('[frames] loaded', `${frames.size}/${frameNames.length}`);
+    }
+
+    /**********************
+     * positioning helpers
+     **********************/
+    function stageRect() { return stage.getBoundingClientRect(); }
+
+    function applyMouthPosition() {
+      // place mouth by anchor (relative) and measured scaling
+      const rect = stageRect();
+      const tgtW = parseInt(widthSlider.value, 10);
+      const scale = parseInt(scaleSlider.value, 10) / 100;
+      widthLabel.textContent = `${tgtW} px`;
+      scaleLabel.textContent = `${Math.round(scale*100)}%`;
+
+      mouthImg.style.width = `${tgtW}px`;
+      mouthImg.style.transform = `translate(-50%, -50%) scale(${scale})`;
+
+      if (anchor) {
+        mouthImg.style.left = `${(anchor.x * rect.width)}px`;
+        mouthImg.style.top  = `${(anchor.y * rect.height)}px`;
+      } else {
+        // sensible default: approximately center-low face in your portrait
+        mouthImg.style.left = `${0.52 * rect.width}px`;
+        mouthImg.style.top  = `${0.74 * rect.height}px`;
+      }
+    }
+
+    // click once on real mouth to anchor
+    stage.addEventListener('click', (e) => {
+      // ignore if the click is outside the portrait image paint area
+      const rect = stageRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top)  / rect.height;
+      anchor = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) };
+      localStorage.setItem(anchorKey, JSON.stringify(anchor));
+      log('[anchor] saved x=' + anchor.x.toFixed(3) + ', y=' + anchor.y.toFixed(3));
+      applyMouthPosition();
+    });
+
+    widthSlider.oninput = () => { localStorage.setItem('targetWidth', widthSlider.value); applyMouthPosition(); };
+    scaleSlider.oninput = () => { localStorage.setItem('scalePct', scaleSlider.value); applyMouthPosition(); };
+    window.addEventListener('resize', applyMouthPosition);
+
+    /**********************
+     * realtime (WebRTC)
+     **********************/
+    async function startCall() {
+      if (pc) return;
+
+      setStatus('connecting', 'idle');
+      log('[mic] requesting…');
+      micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
       log('[mic] granted.');
 
-      pc = new RTCPeerConnection({ iceServers:[{urls:'stun:stun.l.google.com:19302'}] });
-      micStream.getTracks().forEach(t=>pc.addTrack(t, micStream));
+      // peer connection
+      pc = new RTCPeerConnection();
 
-      const remoteStream = new MediaStream();
-      pc.ontrack = (e) => {
-        if (e.track.kind==='audio') {
-          remoteStream.addTrack(e.track);
-          remoteAudio.srcObject = remoteStream;
-          startLipVU(remoteStream);            // drive lips from Emma's voice
+      // outgoing (your mic)
+      micStream.getAudioTracks().forEach(t => pc.addTrack(t, micStream));
+
+      // incoming (Emma speaking)
+      pc.ontrack = (ev) => {
+        if (ev.track.kind !== 'audio') return;
+        if (!remoteAudio) {
+          remoteAudio = document.createElement('audio');
+          remoteAudio.autoplay = true;
+          remoteAudio.playsInline = true;
+          remoteAudio.muted = false;
+          document.body.appendChild(remoteAudio);
         }
-      };
-      pc.onconnectionstatechange = () => log('[pc] state: ' + pc.connectionState);
+        remoteAudio.srcObject = ev.streams[0];
 
-      const offer = await pc.createOffer({ offerToReceiveAudio:true });
+        // drive lip sync from incoming audio RMS
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (sourceNode) sourceNode.disconnect();
+        sourceNode = audioCtx.createMediaStreamSource(ev.streams[0]);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        sourceNode.connect(analyser);
+
+        animateMouthByAudio();
+      };
+
+      // create offer
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
       await pc.setLocalDescription(offer);
 
-      // 1) get token (simple shape: { client_secret: "sk-..." })
       log('[token] fetching…');
-      const tokRes = await fetch('/api/realtime-session', { method:'GET' });
-      const tokTxt = await tokRes.text(); let tok=null; try{tok=JSON.parse(tokTxt)}catch{}
-      if (!tokRes.ok || !tok?.client_secret) throw new Error(`[token] ${tokRes.status} ${tokTxt.slice(0,200)}`);
-      log('[token] ok.');
-
-      // 2) exchange SDP via our server (POST application/sdp) → returns plain text answer
-      log('[sdp] exchanging via /api/realtime-session (POST)…');
-      const sdpRes = await fetch('/api/realtime-session', {
-        method:'POST',
-        headers:{'Content-Type':'application/sdp'},
+      // IMPORTANT: Post the SDP as PLAIN TEXT, expect PLAIN TEXT answer (SDP)
+      const resp = await fetch('/api/realtime-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
         body: offer.sdp
       });
-      const answer = await sdpRes.text();
-      if (!sdpRes.ok || !answer.includes('\nv=')) throw new Error(`[sdp] ${sdpRes.status} ${answer.slice(0,200)}`);
-      await pc.setRemoteDescription({ type:'answer', sdp: answer });
-      setStatus('connected'); log('[pc] connected');
 
-      // Send a warm instruction once (optional best-effort via data channel)
-      try {
-        // not all models expose control events; this is illustrative
-        log('[persona] Emma set to warm & kind.');
-      } catch {}
+      // Even if status is 201, it’s fine — we want the SDP text
+      const answerSDP = await resp.text();
+      log('[token] ok.');
 
-    } catch (e) {
-      setStatus('error');
-      log('[ERROR] ' + (e?.message||e));
-      hangup();
+      // set remote answer
+      await pc.setRemoteDescription({ type:'answer', sdp: answerSDP });
+      setStatus('live', 'ok');
+      log('[sdp] handshake complete.');
+
+      // ask model to greet once (optional)
+      setTimeout(() => sendData({ type: 'response.create', response: { instructions: "Hi! I'm Emma. How can I help today?" }}), 300);
     }
-  }
 
-  function hangup(){
-    stopLipVU();
-    if (pc){ try{pc.close();}catch{} pc=null; }
-    if (micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
-    setStatus('ended'); log('[call] ended');
-  }
+    function sendData(obj){
+      // Send lightweight commands over a data channel if you want.
+      // Not strictly necessary for basic mic->model->audio loop.
+      if (!pc) return;
+      if (!pc._data) {
+        pc._data = pc.createDataChannel('control');
+        pc._data.onopen = () => {/* ready */};
+      }
+      if (pc._data.readyState === 'open') {
+        pc._data.send(JSON.stringify(obj));
+      }
+    }
 
-  startBtn.addEventListener('click', startCall);
-  hangBtn.addEventListener('click', hangup);
-  testBtn.addEventListener('click', () => {
-    try {
-      const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const o = ctx.createOscillator(); const g = ctx.createGain(); g.gain.value=0.03;
-      o.connect(g).connect(ctx.destination); o.start(); setTimeout(()=>{o.stop();ctx.close();},120);
-      log('[speaker] ping');
-    } catch {}
-  });
+    async function hangUp() {
+      if (raf) cancelAnimationFrame(raf);
+      if (pc) { pc.getSenders().forEach(s=>s.track?.stop()); pc.close(); }
+      pc = null;
 
-  // First layout
-  layoutMouth();
-})();
-</script>
+      if (remoteAudio) { remoteAudio.srcObject = null; remoteAudio.remove(); remoteAudio = null; }
+      if (audioCtx?.state !== 'closed') await audioCtx?.close().catch(()=>{});
+      audioCtx = analyser = sourceNode = null;
+
+      setStatus('ended', 'idle');
+      log('[call] ended.');
+    }
+
+    // autoplay helper
+    testBtn.addEventListener('click', async () => {
+      // create and play a tiny silent buffer to satisfy autoplay
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate/10, audioCtx.sampleRate);
+      const src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(audioCtx.destination); src.start();
+      log('[speaker] test ping.');
+    });
+
+    startBtn.onclick = startCall;
+    hangBtn.onclick  = hangUp;
+
+    /**********************
+     * lip animation by audio
+     **********************/
+    function animateMouthByAudio() {
+      if (!analyser) return;
+      const bins = new Uint8Array(analyser.frequencyBinCount);
+
+      const loop = () => {
+        analyser.getByteTimeDomainData(bins);
+
+        // Compute simple RMS (0..1)
+        let sum = 0;
+        for (let i=0;i<bins.length;i++) {
+          const v = (bins[i]-128)/128;
+          sum += v*v;
+        }
+        const rms = Math.sqrt(sum/bins.length);
+        // Update tiny VU
+        const vu = Math.min(1, rms*6);
+        vuBar.style.width = `${vu*120}px`;
+
+        // Pick frame based on amplitude
+        // Very simple mapping (tweak as you like)
+        let next = 'm';
+        if (rms > 0.03) next = 'i';
+        if (rms > 0.05) next = 'f';
+        if (rms > 0.08) next = 'v';
+        if (rms > 0.12) next = 'o';
+        if (rms > 0.16) next = 'say';
+
+        if (next !== currentFrame) {
+          currentFrame = next;
+          const im = frames.get(next);
+          if (im) mouthImg.src = im.src;
+        }
+
+        raf = requestAnimationFrame(loop);
+      };
+      raf = requestAnimationFrame(loop);
+    }
+
+    /**********************
+     * bootstrap
+     **********************/
+    (async () => {
+      await preloadFrames();
+      applyMouthPosition();
+      setStatus('idle', 'idle');
+    })();
+  </script>
 </body>
 </html>
