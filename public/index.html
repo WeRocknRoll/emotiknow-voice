@@ -274,6 +274,54 @@
   // initial paint
   applyOverlay(0);
 })();
+  <script>
+/** Drives the mouth overlay using the remote audio stream. */
+function startMouthFromAudio(remoteStream) {
+  // 1) WebAudio analyser
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(remoteStream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  src.connect(analyser);
+  const buf = new Float32Array(analyser.fftSize);
+
+  // 2) Grab your UI sliders & mouth frames
+  const gateSlider   = document.querySelector('#gate');     // 0.00 - 0.50
+  const smoothSlider = document.querySelector('#smooth');   // 0.0  - 1.0 (higher=slower)
+  const mouthImg     = document.querySelector('#mouth');    // <img id="mouth">
+  const frames = window.__MOUTH_FRAMES || [];               // array of Image() objects you loaded
+  if (!mouthImg || frames.length === 0) return;
+
+  let smooth = 0;               // EMA of loudness
+  let lastIdx = 0;
+
+  function loop() {
+    analyser.getFloatTimeDomainData(buf);
+    // RMS loudness
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);            // ~0.0 - 0.3
+    const gate = parseFloat(gateSlider?.value ?? 0.05);  // from UI
+    const alpha = 1 - Math.min(0.98, parseFloat(smoothSlider?.value ?? 0.8)); // 0.02..0.2
+
+    // Smooth (EMA)
+    smooth = smooth + alpha * (rms - smooth);
+
+    // Map loudness -> frame index
+    const active = Math.max(0, smooth - gate);
+    const scaled = Math.min(1, active * 18);            // scale factor; tweak if too still/too jumpy
+    let idx = Math.floor(scaled * (frames.length - 1));
+
+    // avoid flicker: don’t change for tiny deltas
+    if (Math.abs(idx - lastIdx) >= 1) {
+      lastIdx = idx;
+      mouthImg.src = frames[idx].src;
+    }
+
+    requestAnimationFrame(loop);
+  }
+  loop();
+}
 </script>
 </body>
 </html>
