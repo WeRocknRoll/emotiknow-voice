@@ -5,7 +5,15 @@
 const allowOrigin = process.env.ALLOWED_ORIGIN || "*";
 const MODEL = process.env.REALTIME_MODEL || "gpt-4o-mini-realtime-preview";
 const DEFAULT_VOICE = process.env.REALTIME_VOICE || "shimmer";
-
+{
+  model: "gpt-4o-mini-realtime-preview",
+  voice: "shimmer",
+  instructions:
+    "You are Emma. Be warm, kind, and caring. Speak with gentle empathy and encouragement. " +
+    "Keep replies concise (1–2 sentences), but add a soft, human touch. " +
+    "Reflect back key feelings (‘That sounds exciting’, ‘I can hear that was hard’) before answering. " +
+    "Avoid long pauses and start speaking as soon as the user finishes."
+}
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", allowOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
