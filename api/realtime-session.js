@@ -1,97 +1,56 @@
-// /api/realtime-session.js
-// Vercel Serverless Function – creates a Realtime session with OpenAI
-// Works for both POST (from your app) and GET (for quick browser testing)
-
-const allowOrigin = process.env.ALLOWED_ORIGIN || "*";
-const MODEL = process.env.REALTIME_MODEL || "gpt-4o-mini-realtime-preview";
-const DEFAULT_VOICE = process.env.REALTIME_VOICE || "shimmer";
-{
-  model: "gpt-4o-mini-realtime-preview",
-  voice: "shimmer",
-  instructions:
-    "You are Emma. Be warm, kind, and caring. Speak with gentle empathy and encouragement. " +
-    "Keep replies concise (1–2 sentences), but add a soft, human touch. " +
-    "Reflect back key feelings (‘That sounds exciting’, ‘I can hear that was hard’) before answering. " +
-    "Avoid long pauses and start speaking as soon as the user finishes."
-}
-function cors(res) {
-  res.setHeader("Access-Control-Allow-Origin", allowOrigin);
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type,Authorization,Accept"
-  );
-}
+// pages/api/realtime-session.js
+// Vercel "pages" API route that mints a short-lived client_secret
+// and configures the Realtime session (voice, fast VAD, personality, etc).
 
 export default async function handler(req, res) {
-  cors(res);
-
-  // Preflight
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  if (req.method !== "GET" && req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST" && req.method !== "GET") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    // This was the reason for your 500s earlier
-    return res.status(500).json({
-      error: "Missing OPENAI_API_KEY env var on the server.",
-    });
+    return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
   }
 
   try {
-    // Allow client to override voice/model if desired
-    const body =
-      req.method === "POST" && req.headers["content-type"]?.includes("application/json")
-        ? req.body ?? {}
-        : {};
-
-    // Create a short-lived Realtime session
     const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: body.model || MODEL,
-        // Voice is needed for TTS replies
-        voice: body.voice || DEFAULT_VOICE,
+        model: "gpt-4o-mini-realtime-preview",
+        voice: "shimmer",
 
-        // (Optional but nice) make lips feel warmer/less snappy on TTS
-        // You can tune these later in the front end as well
-        modalities: ["text", "audio"],
-        // Turn detection handled server-side (OpenAI VAD)
-        turn_detection: { type: "server_vad" },
+        // Make Emma feel warm, kind, and caring by default
+        instructions:
+          "You are Emma. Be warm, kind, and caring. Reply in short, friendly sentences. " +
+          "Acknowledge feelings briefly (e.g., 'I hear that was tough') and then help. " +
+          "Start speaking promptly as soon as the user finishes.",
+
+        // Faster, more responsive speech turn detection
+        turn_detection: { type: "server_vad", silence_duration_ms: 400 },
+
+        // Keep replies compact (speeds perception)
+        max_response_output_tokens: 250,
+
+        // Audio output only (we stream a remote audio track)
+        modalities: ["audio"]
       }),
     });
 
-    const data = await r.json();
-
     if (!r.ok) {
-      // Bubble up clean JSON error instead of HTML (that was the “Unexpected token T” you saw)
-      return res.status(r.status).json({
-        error: data?.error || data,
-      });
+      const text = await r.text();
+      return res.status(r.status).json({ error: "session_create_failed", detail: text });
     }
 
-    // Return only the bits your front-end needs
-    // (client_secret.value is the session token for the WebRTC handshake)
-    return res.status(200).json({
-      id: data.id,
-      model: data.model,
-      voice: data.voice,
-      client_secret: data.client_secret, // { type, value, expires_at }
-      expires_at: data.client_secret?.expires_at,
-    });
+    const json = await r.json();
+    // Return the whole thing; the client uses client_secret.value
+    return res.status(200).json(json);
   } catch (err) {
-    return res.status(500).json({
-      error: "Failed to create Realtime session",
-      detail: String(err?.message || err),
-    });
+    console.error("realtime-session error:", err);
+    return res.status(500).json({ error: "FUNCTION_INVOCATION_FAILED" });
   }
 }
