@@ -1,39 +1,53 @@
-// api/realtime-session.js
+// /api/realtime-session.js  (Vercel "pages" API)
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  // Only POST is allowed
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Basic CORS for browser POST
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Missing OPENAI_API_KEY' });
   }
 
   try {
-    const { voice = "shimmer" } = req.body || {};
-    const model = "gpt-4o-mini-realtime-preview";
-
-    const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
-      method: "POST",
+    // Create a *client* secret for the browser to start a Realtime WebRTC session.
+    // This does not expose your main API key to the browser.
+    const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model,
-        // Voice options: "shimmer", "verse", "alloy", etc. (keep shimmer for female)
-        voice,
-        // Audio only; the front-end will render the portrait + mouth
-        modalities: ["audio"],
-        // Give the model a gentle, kind baseline
-        instructions: "You are Emma. Speak warmly, kindly, and concisely. Be caring and supportive."
+        // Voice realtime model
+        model: 'gpt-4o-realtime-preview-2024-12-17',
+        // We want audio out; the UI sends audio in via WebRTC
+        voice: 'shimmer',              // soft, feminine; options: shimmer, verse, aria
+        // Don’t pass any unknown params (e.g., turn_detection.prefix_ms) – they cause 400s
       })
     });
 
     if (!r.ok) {
-      const text = await r.text();
-      return res.status(r.status).json({ error: text || "Failed to create session" });
+      const text = await r.text().catch(() => '');
+      return res.status(r.status).json({ error: 'session_create_failed', detail: text });
     }
 
-    const json = await r.json();
-    // Pass the raw session JSON straight to the browser
-    return res.status(200).json(json);
+    const session = await r.json();
+    // Return the short-lived client_secret to the browser
+    return res.status(200).json({
+      id: session.id,
+      model: session.model,
+      voice: session.voice,
+      client_secret: session.client_secret   // { value, expires_at }
+    });
   } catch (err) {
-    return res.status(500).json({ error: err?.message || "Server error" });
+    return res.status(500).json({ error: 'FUNCTION_INVOCATION_FAILED', detail: String(err) });
   }
 }
