@@ -1,43 +1,44 @@
 // /api/realtime-session.js
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
+// Vercel /api function (CommonJS). No "app/" or "pages/" required.
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: "Missing OPENAI_API_KEY" });
-    return;
+module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    // Create a short-lived session for the Realtime API
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+    }
+
+    const { voice, instructions } = (req.body && typeof req.body === "object")
+      ? req.body
+      : {};
+
     const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: "gpt-4o-mini-realtime-preview",
-        // Voice name can be switched client-side; default here is "shimmer"
-        voice: "shimmer",
-        // Behavioral instructions for warmer personality
-        instructions:
-          "You are Emma: warm, kind, caring, encouraging, and concise. Respond quickly in a friendly tone. Keep answers brief unless asked to elaborate.",
-      }),
+        voice: voice || "shimmer",
+        // Warm, kind, caring defaults; page can override with its own "instructions"
+        instructions: instructions || "You are Emma—warm, kind, caring, encouraging, and concise. Reply quickly in a friendly tone. Keep answers brief unless the user asks for detail."
+      })
     });
 
     if (!r.ok) {
       const text = await r.text();
-      res.status(r.status).json({ error: text || "session_create_failed" });
-      return;
+      return res.status(r.status).json({ error: text || "session_create_failed" });
     }
 
     const session = await r.json();
-    res.status(200).json(session);
+    return res.status(200).json(session);
   } catch (err) {
-    res.status(500).json({ error: "FUNCTION_INVOCATION_FAILED" });
+    return res.status(500).json({ error: "FUNCTION_INVOCATION_FAILED" });
   }
-}
+};
