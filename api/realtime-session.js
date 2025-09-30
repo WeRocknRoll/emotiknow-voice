@@ -1,68 +1,51 @@
-// Vercel Serverless Function — creates a short-lived client_secret for WebRTC
-// Path: /api/realtime-session.js
-
+/**
+ * Minimal Realtime session token endpoint for Vercel “/api/realtime-session”.
+ * POST only. Returns { id, client_secret:{ value, expires_at }, model, voice }.
+ */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    // Allow a simple GET for quick health checks (optional)
-    return res
-      .status(405)
-      .json({ error: "Method not allowed. Use POST to create a session." });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
       return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
     }
 
-    // You can pass a desired voice/personality from the client if you want:
-    const { voice = "shimmer", model = "gpt-4o-mini-realtime-preview-2024-12-17" } =
-      (req.body && typeof req.body === "object") ? req.body : {};
+    // Pick a model and a default voice that actually exist for the preview.
+    const MODEL = "gpt-4o-mini-realtime-preview";
+    // Voices that work with the preview (examples): "shimmer", "verse".
+    // You can override from the client via ?voice=shimmer|verse if you’d like.
+    const voice = (req.query.voice || "shimmer").toString();
 
-    // IMPORTANT: the Realtime session must include BOTH audio and text
-    const body = {
-      model,
-      voice,                             // "shimmer", "alloy", etc.
-      modalities: ["audio", "text"],     // <-- the fix
-      // Optional niceties:
-      input_audio_format: "pcm16",
-      output_audio_format: "pcm16",
-      // Lower initial latency:
-      turn_detection: { type: "server_vad", threshold: 0.7, prefix_ms: 250 },
-      // A softer, caring vibe right from system prompt:
-      instructions:
-        "You are Emma: warm, gentle, kind. Be concise, friendly, and supportive. " +
-        "Acknowledge feelings, keep responses natural, and speak at a calm pace."
-    };
-
-    const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
+    // IMPORTANT: keep the payload minimal for the preview. Do NOT add
+    // modalities, turn_detection, or other options that triggered 400s.
+    const createRes = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+        "OpenAI-Beta": "realtime=v1"
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: MODEL,
+        voice
+      })
     });
 
-    if (!r.ok) {
-      const err = await safeJson(r);
-      return res.status(r.status).json({ error: err || `Upstream ${r.status}` });
+    if (!createRes.ok) {
+      const text = await createRes.text();
+      return res.status(createRes.status).json({ error: text });
     }
 
-    const session = await r.json();
+    const token = await createRes.json();
+    // Mirror back the model/voice for the client UI.
+    token.model = MODEL;
+    token.voice = voice;
 
-    // Allow browser usage from any origin (adjust if you want to restrict)
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    return res.status(200).json(session);
-  } catch (e) {
-    return res.status(500).json({ error: e?.message || "Server error" });
+    return res.status(200).json(token);
+  } catch (err) {
+    return res.status(500).json({ error: String(err?.message || err) });
   }
-}
-
-function safeJson(r) {
-  return r.text().then(t => {
-    try { return JSON.parse(t); } catch { return t; }
-  });
 }
