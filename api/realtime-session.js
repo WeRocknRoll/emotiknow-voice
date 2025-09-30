@@ -1,59 +1,43 @@
 // /api/realtime-session.js
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+    return;
   }
 
   try {
-    const { personality = "ballad" } = (req.body && typeof req.body === "object") ? req.body : {};
-
+    // Create a short-lived session for the Realtime API
     const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // Realtime model
         model: "gpt-4o-mini-realtime-preview",
-
-        // ✅ must include text with audio
-        modalities: ["audio", "text"],
-
-        // Voice & latency
-        voice: personality === "ballad" ? "ballad" : "shimmer",
-        input_audio_format: "pcm16",
-        output_audio_format: "pcm16",
-        turn_detection: { // react faster
-          type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 200,
-          silence_duration_ms: 200
-        },
-
-        // Persona
+        // Voice name can be switched client-side; default here is "shimmer"
+        voice: "shimmer",
+        // Behavioral instructions for warmer personality
         instructions:
-          "You are Emma—warm, kind, encouraging, and concise. " +
-          "Speak like a caring companion. Be supportive and upbeat. " +
-          "When the user greets you, greet them back right away.",
-
-        // Optional tools later (keep empty for now)
-        tools: []
-      })
+          "You are Emma: warm, kind, caring, encouraging, and concise. Respond quickly in a friendly tone. Keep answers brief unless asked to elaborate.",
+      }),
     });
 
     if (!r.ok) {
       const text = await r.text();
-      return res.status(r.status).json({ error: "session_create_failed", raw: text });
+      res.status(r.status).json({ error: text || "session_create_failed" });
+      return;
     }
 
-    // Proxy the session JSON back to the client
-    const json = await r.json();
-    // CORS for local/production
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    return res.status(200).json(json);
-  } catch (e) {
-    return res.status(500).json({ error: "server_error", message: String(e) });
+    const session = await r.json();
+    res.status(200).json(session);
+  } catch (err) {
+    res.status(500).json({ error: "FUNCTION_INVOCATION_FAILED" });
   }
 }
