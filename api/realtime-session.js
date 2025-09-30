@@ -1,53 +1,54 @@
-// /api/realtime-session.js  (Vercel "pages" API)
+// Vercel serverless function – Node (Edge not required)
+// POST /api/realtime-session -> { client_secret: { value: "ek_..." }, model, voice }
+
 export default async function handler(req, res) {
-  // Only POST is allowed
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Basic CORS for browser POST
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Missing OPENAI_API_KEY' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
-    // Create a *client* secret for the browser to start a Realtime WebRTC session.
-    // This does not expose your main API key to the browser.
-    const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'OPENAI_API_KEY missing on Vercel' });
+      return;
+    }
+
+    // Accept optional voice/model from the client; set safe defaults.
+    let body = {};
+    try { body = (await (req.body ? Promise.resolve(req.body) : Promise.resolve({}))) || {}; } catch (_) {}
+    // If Content-Type is JSON, Vercel parses automatically; otherwise:
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (_) { body = {}; }
+    }
+
+    const voice = (body.voice || 'shimmer').toLowerCase();
+    // Use the currently available realtime mini preview
+    const model = body.model || 'gpt-4o-mini-realtime-preview';
+
+    // Create a short-lived session token (client_secret) we can use for the SDPPOST.
+    const resp = await fetch('https://api.openai.com/v1/realtime/sessions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        // Voice realtime model
-        model: 'gpt-4o-realtime-preview-2024-12-17',
-        // We want audio out; the UI sends audio in via WebRTC
-        voice: 'shimmer',              // soft, feminine; options: shimmer, verse, aria
-        // Don’t pass any unknown params (e.g., turn_detection.prefix_ms) – they cause 400s
+        model,
+        voice
       })
     });
 
-    if (!r.ok) {
-      const text = await r.text().catch(() => '');
-      return res.status(r.status).json({ error: 'session_create_failed', detail: text });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      res.status(resp.status).json({ error: 'Upstream error', details: errText });
+      return;
     }
 
-    const session = await r.json();
-    // Return the short-lived client_secret to the browser
-    return res.status(200).json({
-      id: session.id,
-      model: session.model,
-      voice: session.voice,
-      client_secret: session.client_secret   // { value, expires_at }
-    });
-  } catch (err) {
-    return res.status(500).json({ error: 'FUNCTION_INVOCATION_FAILED', detail: String(err) });
+    const json = await resp.json();
+    // Return the entire session JSON (includes client_secret.value and expires_at).
+    res.status(200).json(json);
+  } catch (e) {
+    res.status(500).json({ error: 'FUNCTION_INVOCATION_FAILED', details: String(e) });
   }
 }
