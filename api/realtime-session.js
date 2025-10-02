@@ -1,54 +1,26 @@
-// Vercel serverless function – Node (Edge not required)
-// POST /api/realtime-session -> { client_secret: { value: "ek_..." }, model, voice }
-
+// /api/realtime-session.js
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: 'OPENAI_API_KEY missing on Vercel' });
-      return;
+    const { sdp, voice } = req.body || {};
+    if (!sdp) {
+      return res.status(400).json({ error: 'Missing SDP in request body' });
     }
 
-    // Accept optional voice/model from the client; set safe defaults.
-    let body = {};
-    try { body = (await (req.body ? Promise.resolve(req.body) : Promise.resolve({}))) || {}; } catch (_) {}
-    // If Content-Type is JSON, Vercel parses automatically; otherwise:
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch (_) { body = {}; }
-    }
+    // TODO: Replace this with your real voice service:
+    //  - Send `sdp` + `voice` to your Realtime/TTS server
+    //  - Receive `answerSdp`
+    //  - return res.status(200).json({ answer: answerSdp });
 
-    const voice = (body.voice || 'shimmer').toLowerCase();
-    // Use the currently available realtime mini preview
-    const model = body.model || 'gpt-4o-mini-realtime-preview';
+    return res
+      .status(501)
+      .json({ error: 'Voice backend not configured yet. Running local-only.' });
 
-    // Create a short-lived session token (client_secret) we can use for the SDPPOST.
-    const resp = await fetch('https://api.openai.com/v1/realtime/sessions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model,
-        voice
-      })
-    });
-
-    if (!resp.ok) {
-      const errText = await resp.text();
-      res.status(resp.status).json({ error: 'Upstream error', details: errText });
-      return;
-    }
-
-    const json = await resp.json();
-    // Return the entire session JSON (includes client_secret.value and expires_at).
-    res.status(200).json(json);
   } catch (e) {
-    res.status(500).json({ error: 'FUNCTION_INVOCATION_FAILED', details: String(e) });
+    return res.status(500).json({ error: e?.message || 'server error' });
   }
 }
