@@ -80,7 +80,7 @@
         <img id="bg" class="emma-bg" src="/emma.jpg" alt="Emma" />
 
         <!-- Mouth overlay (we only swap its src) -->
-        <img id="mouth" src="/mouth/i2.png" alt="mouth overlay" />
+        <img id="mouth" src="/mouth/mouth_closed.png" alt="mouth overlay" />
 
         <!-- anchor indicator -->
         <div id="anchorDot" class="anchor-dot" style="display:none;"></div>
@@ -138,24 +138,30 @@
 
   <script>
     // ----------------------- CONFIG -----------------------
-    // Your current mouth files in /public/mouth:
-    // i2.png (closed), o2.png (open), m2.jpg (mid), e2.jpg (teeth)
-    // NOTE: JPGs will show a rectangle if they are not cut out.
-    // Later, convert m2.jpg & e2.jpg to PNGs with transparency.
-
+    // Your PNG frames in /public/mouth
     const MOUTH_FRAMES = {
-      closed: '/mouth/i2.png',
-      mid:    '/mouth/m2.jpg',   // later -> '/mouth/m2.png'
-      open:   '/mouth/o2.png',
-      teeth:  '/mouth/e2.jpg'    // later -> '/mouth/e2.png'
+      closed: '/mouth/mouth_closed.png',
+      half:   '/mouth/mouth_helf.png', // kept your file name as-is
+      open:   '/mouth/mouth_open.png'
     };
 
-    // Simple mapping depending on amplitude
+    // Small hysteresis around thresholds to reduce frame flicker
+    const THRESH = { half: 0.16, open: 0.30 };
+    const HYST = 0.03; // +/- around thresholds
+
+    let lastFrame = 'closed';
     function pickMouthByLevel(level){
-      if (level > 0.38) return MOUTH_FRAMES.teeth;
-      if (level > 0.26) return MOUTH_FRAMES.open;
-      if (level > 0.14) return MOUTH_FRAMES.mid;
-      return MOUTH_FRAMES.closed;
+      // widen thresholds depending on what we showed last time
+      if (lastFrame === 'open') {
+        if (level < THRESH.open - HYST) lastFrame = (level < THRESH.half - HYST) ? 'closed' : 'half';
+      } else if (lastFrame === 'half') {
+        if      (level > THRESH.open + HYST) lastFrame = 'open';
+        else if (level < THRESH.half - HYST) lastFrame = 'closed';
+      } else { // closed
+        if      (level > THRESH.open + HYST) lastFrame = 'open';
+        else if (level > THRESH.half + HYST) lastFrame = 'half';
+      }
+      return MOUTH_FRAMES[lastFrame];
     }
 
     // ----------------------- ELEMENTS -----------------------
@@ -186,15 +192,11 @@
     // Place mouth element according to anchor + width + scale
     function applyMouthLayout(){
       if(!anchor) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = rect.left + rect.width * anchor.x;
-      const y = rect.top  + rect.height * anchor.y;
-
       const pxWidth = parseInt(wSlider.value,10);
       const scale   = parseFloat(scaleSlider.value);
 
-      mouthEl.style.left = `${anchor.x*100}%`;
-      mouthEl.style.top  = `${anchor.y*100}%`;
+      mouthEl.style.left  = `${anchor.x*100}%`;
+      mouthEl.style.top   = `${anchor.y*100}%`;
       mouthEl.style.width = (pxWidth * scale) + 'px';
 
       // anchor dot
@@ -218,7 +220,7 @@
     scaleSlider.addEventListener('input', applyMouthLayout);
 
     // ----------------------- AUDIO / METER -----------------------
-    let ctx, analyser, micStream, rafId, decay, gate, levelSmooth=0;
+    let ctx, analyser, micStream, rafId, levelSmooth=0;
 
     function startMeter(stream){
       ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -237,10 +239,12 @@
           const v = Math.abs(buf[i]-128)/128;
           if(v>peak) peak=v;
         }
+
+        // smoothing & gate
         const smooth = parseFloat(sSlider.value);
         levelSmooth = levelSmooth * smooth + (1-smooth) * peak;
 
-        gate = parseFloat(gSlider.value);
+        const gate = parseFloat(gSlider.value);
         const activeLevel = Math.max(0, levelSmooth - gate) / (1-gate + 1e-6);
 
         // choose mouth sprite
@@ -267,7 +271,7 @@
     async function startCall(){
       if(pc) return;
 
-      const voice = voiceSelect.value; // you can pass to server if you like
+      const voice = voiceSelect.value;
       try{
         micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
         startMeter(micStream);
@@ -275,13 +279,11 @@
 
         pc = new RTCPeerConnection();
         micStream.getTracks().forEach(t=>pc.addTrack(t,micStream));
-
         pc.onconnectionstatechange = ()=> log(`[pc] state: ${pc.connectionState}`);
 
         const offer = await pc.createOffer({ offerToReceiveAudio:true });
         await pc.setLocalDescription(offer);
 
-        // fetch ephemeral client secret + SDP exchange via your route
         const res = await fetch('/api/realtime-session', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
@@ -291,21 +293,14 @@
         if(!res.ok){
           const text = await res.text();
           log(`[error] token http ${res.status}\n${text}`);
-          hangUp();
-          return;
+          hangUp(); return;
         }
 
         const data = await res.json();
-        if(!data || !data.answer){ // supports both JSON or direct SDP, depending on your route
-          // assume we returned {answer:"SDP"} (common pattern)
-          if (data && data.sdp) {
-            await pc.setRemoteDescription({ type:'answer', sdp:data.sdp });
-          } else if (data.answer) {
-            await pc.setRemoteDescription({ type:'answer', sdp:data.answer });
-          }
-        } else {
-          await pc.setRemoteDescription({ type:'answer', sdp:data.answer });
-        }
+        // Accept either {answer:sdp} or {sdp:...}
+        const answerSdp = data?.answer || data?.sdp;
+        if (!answerSdp){ log('[error] invalid server response'); hangUp(); return; }
+        await pc.setRemoteDescription({ type:'answer', sdp: answerSdp });
         log('[sdp] handshake complete.');
 
         startBtn.disabled = true;
@@ -332,7 +327,6 @@
     hangBtn.addEventListener('click', hangUp);
 
     // ----------------------- INIT -----------------------
-    // restore anchor + initial layout
     if(anchor){
       applyMouthLayout();
       log(`[anchor] restored x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
