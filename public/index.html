@@ -9,6 +9,7 @@
     :root{
       --bg:#0c0f12; --panel:#12161b; --text:#e7edf5; --muted:#9fb0c3; --brand:#4ea3ff;
       --accent:#7bd9b5; --danger:#ff7a7a;
+      --feather: 6px;  /* <-- controls edge softness */
     }
     *{box-sizing:border-box}
     body{
@@ -33,6 +34,20 @@
       position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
       width:200px; image-rendering:auto; user-select:none; pointer-events:none;
       filter: drop-shadow(0 0 0 transparent);
+
+      /* Feather edges (fade into background) */
+      -webkit-mask-image: radial-gradient(
+        ellipse 115% 95% at 50% 55%,
+        #000 calc(72% - var(--feather)),
+        transparent 100%
+      );
+      mask-image: radial-gradient(
+        ellipse 115% 95% at 50% 55%,
+        #000 calc(72% - var(--feather)),
+        transparent 100%
+      );
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
     }
     /* anchor marker (when user clicks Emma's mouth) */
     .anchor-dot{
@@ -79,7 +94,7 @@
         <!-- Background -->
         <img id="bg" class="emma-bg" src="/emma.jpg" alt="Emma" />
 
-        <!-- Mouth overlay (we only swap its src) -->
+        <!-- Mouth overlay -->
         <img id="mouth" src="/mouth/mouth_closed.png" alt="mouth overlay" />
 
         <!-- anchor indicator -->
@@ -125,6 +140,11 @@
       <input type="range" id="mouthScale" min="0.50" max="1.60" step="0.01" value="0.95" />
     </div>
 
+    <div class="ctrl">
+      <label>Edge feather</label>
+      <input type="range" id="feather" min="0" max="16" step="1" value="6" />
+    </div>
+
     <div class="tip">
       Click Emma’s <b>real mouth</b> once to anchor the overlay.
       The position & sizing are saved per browser.
@@ -137,69 +157,45 @@
   </aside>
 
   <script>
-    // ----------------------- CONFIG -----------------------
-    // Your PNG frames in /public/mouth
     const MOUTH_FRAMES = {
       closed: '/mouth/mouth_closed.png',
-      half:   '/mouth/mouth_helf.png', // kept your file name as-is
+      mid:    '/mouth/mouth_helf.png',
       open:   '/mouth/mouth_open.png'
     };
 
-    // Small hysteresis around thresholds to reduce frame flicker
-    const THRESH = { half: 0.16, open: 0.30 };
-    const HYST = 0.03; // +/- around thresholds
-
-    let lastFrame = 'closed';
     function pickMouthByLevel(level){
-      // widen thresholds depending on what we showed last time
-      if (lastFrame === 'open') {
-        if (level < THRESH.open - HYST) lastFrame = (level < THRESH.half - HYST) ? 'closed' : 'half';
-      } else if (lastFrame === 'half') {
-        if      (level > THRESH.open + HYST) lastFrame = 'open';
-        else if (level < THRESH.half - HYST) lastFrame = 'closed';
-      } else { // closed
-        if      (level > THRESH.open + HYST) lastFrame = 'open';
-        else if (level > THRESH.half + HYST) lastFrame = 'half';
-      }
-      return MOUTH_FRAMES[lastFrame];
+      if (level > 0.32) return MOUTH_FRAMES.open;
+      if (level > 0.18) return MOUTH_FRAMES.mid;
+      return MOUTH_FRAMES.closed;
     }
 
-    // ----------------------- ELEMENTS -----------------------
     const mouthEl = document.getElementById('mouth');
     const canvas  = document.getElementById('canvas');
     const anchorDot = document.getElementById('anchorDot');
-
     const wSlider = document.getElementById('mouthWidth');
     const wLabel  = document.getElementById('wLabel');
     const sSlider = document.getElementById('smooth');
     const gSlider = document.getElementById('gate');
     const scaleSlider = document.getElementById('mouthScale');
     const voiceSelect = document.getElementById('voiceSelect');
-
+    const feather = document.getElementById('feather');
     const startBtn = document.getElementById('startBtn');
     const hangBtn  = document.getElementById('hangBtn');
     const logEl    = document.getElementById('log');
 
     function log(line){
-      logEl.textContent += "\n" + line;
+      logEl.textContent += "\\n" + line;
       logEl.scrollTop = logEl.scrollHeight;
     }
 
-    // ----------------------- ANCHOR STORAGE -----------------------
     let anchor = JSON.parse(localStorage.getItem('emma.anchor') || 'null');
     function saveAnchor(){ localStorage.setItem('emma.anchor', JSON.stringify(anchor)); }
 
-    // Place mouth element according to anchor + width + scale
     function applyMouthLayout(){
       if(!anchor) return;
-      const pxWidth = parseInt(wSlider.value,10);
-      const scale   = parseFloat(scaleSlider.value);
-
-      mouthEl.style.left  = `${anchor.x*100}%`;
-      mouthEl.style.top   = `${anchor.y*100}%`;
-      mouthEl.style.width = (pxWidth * scale) + 'px';
-
-      // anchor dot
+      mouthEl.style.left = (anchor.x*100)+'%';
+      mouthEl.style.top  = (anchor.y*100)+'%';
+      mouthEl.style.width = (parseInt(wSlider.value,10)*parseFloat(scaleSlider.value))+'px';
       anchorDot.style.display = 'block';
       anchorDot.style.left = mouthEl.style.left;
       anchorDot.style.top  = mouthEl.style.top;
@@ -208,136 +204,72 @@
     canvas.addEventListener('click',(e)=>{
       const rect = canvas.getBoundingClientRect();
       anchor = { x:(e.clientX-rect.left)/rect.width, y:(e.clientY-rect.top)/rect.height };
-      saveAnchor();
-      log(`[anchor] saved x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
-      applyMouthLayout();
+      saveAnchor(); applyMouthLayout();
+      log('[anchor] saved x='+anchor.x.toFixed(3)+', y='+anchor.y.toFixed(3));
     });
 
     wSlider.addEventListener('input',()=>{
-      wLabel.textContent = `${wSlider.value} px`;
+      wLabel.textContent = wSlider.value+' px';
       applyMouthLayout();
     });
     scaleSlider.addEventListener('input', applyMouthLayout);
+    feather.addEventListener('input', ()=> {
+      document.documentElement.style.setProperty('--feather', feather.value+'px');
+    });
 
-    // ----------------------- AUDIO / METER -----------------------
     let ctx, analyser, micStream, rafId, levelSmooth=0;
-
     function startMeter(stream){
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      ctx = new (window.AudioContext||window.webkitAudioContext)();
       analyser = ctx.createAnalyser();
       const src = ctx.createMediaStreamSource(stream);
-      src.connect(analyser);
-      analyser.fftSize = 2048;
+      src.connect(analyser); analyser.fftSize = 2048;
       const buf = new Uint8Array(analyser.fftSize);
 
       function tick(){
         analyser.getByteTimeDomainData(buf);
-
-        // crude peak estimate: max deviation from 128
-        let peak = 0;
-        for (let i=0;i<buf.length;i++){
-          const v = Math.abs(buf[i]-128)/128;
-          if(v>peak) peak=v;
-        }
-
-        // smoothing & gate
+        let peak=0; for(let i=0;i<buf.length;i++){ const v=Math.abs(buf[i]-128)/128; if(v>peak) peak=v; }
         const smooth = parseFloat(sSlider.value);
-        levelSmooth = levelSmooth * smooth + (1-smooth) * peak;
-
+        levelSmooth = levelSmooth*smooth + (1-smooth)*peak;
         const gate = parseFloat(gSlider.value);
-        const activeLevel = Math.max(0, levelSmooth - gate) / (1-gate + 1e-6);
-
-        // choose mouth sprite
-        const srcPath = pickMouthByLevel(activeLevel);
-        if (mouthEl.dataset.src !== srcPath){
-          mouthEl.dataset.src = srcPath;
-          mouthEl.src = srcPath;
-        }
-
-        rafId = requestAnimationFrame(tick);
-      }
-      tick();
+        const active = Math.max(0, levelSmooth-gate)/(1-gate+1e-6);
+        const srcPath = pickMouthByLevel(active);
+        if(mouthEl.dataset.src!==srcPath){ mouthEl.dataset.src=srcPath; mouthEl.src=srcPath; }
+        rafId=requestAnimationFrame(tick);
+      } tick();
     }
 
-    function stopMeter(){
-      if(rafId) cancelAnimationFrame(rafId);
-      rafId = null;
-      if(ctx) { ctx.close(); ctx=null; }
-    }
+    function stopMeter(){ if(rafId) cancelAnimationFrame(rafId); if(ctx) ctx.close(); }
 
-    // ----------------------- REALTIME CALL -----------------------
-    // Minimal WebRTC start against your /api/realtime-session endpoint
     let pc;
     async function startCall(){
       if(pc) return;
-
-      const voice = voiceSelect.value;
       try{
-        micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-        startMeter(micStream);
-        log('[mic] granted.');
-
-        pc = new RTCPeerConnection();
-        micStream.getTracks().forEach(t=>pc.addTrack(t,micStream));
-        pc.onconnectionstatechange = ()=> log(`[pc] state: ${pc.connectionState}`);
-
-        const offer = await pc.createOffer({ offerToReceiveAudio:true });
+        micStream=await navigator.mediaDevices.getUserMedia({audio:true});
+        startMeter(micStream); log('[mic] granted.');
+        pc=new RTCPeerConnection(); micStream.getTracks().forEach(t=>pc.addTrack(t,micStream));
+        pc.onconnectionstatechange=()=>log('[pc] '+pc.connectionState);
+        const offer=await pc.createOffer({offerToReceiveAudio:true});
         await pc.setLocalDescription(offer);
-
-        const res = await fetch('/api/realtime-session', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ sdp: offer.sdp, voice })
-        });
-
-        if(!res.ok){
-          const text = await res.text();
-          log(`[error] token http ${res.status}\n${text}`);
-          hangUp(); return;
-        }
-
-        const data = await res.json();
-        // Accept either {answer:sdp} or {sdp:...}
-        const answerSdp = data?.answer || data?.sdp;
-        if (!answerSdp){ log('[error] invalid server response'); hangUp(); return; }
-        await pc.setRemoteDescription({ type:'answer', sdp: answerSdp });
-        log('[sdp] handshake complete.');
-
-        startBtn.disabled = true;
-        hangBtn.disabled  = false;
-      }catch(err){
-        log('[error] ' + (err && err.message || err));
-        hangUp();
-      }
+        const res=await fetch('/api/realtime-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:offer.sdp})});
+        const data=await res.json();
+        await pc.setRemoteDescription({type:'answer',sdp:data.answer||data.sdp});
+        log('[sdp] complete.');
+        startBtn.disabled=true; hangBtn.disabled=false;
+      }catch(err){ log('[error] '+err.message); hangUp(); }
     }
 
     function hangUp(){
-      stopMeter();
-      if(pc){ pc.close(); pc=null; }
-      if(micStream){
-        micStream.getTracks().forEach(t=>t.stop());
-        micStream=null;
-      }
-      startBtn.disabled = false;
-      hangBtn.disabled  = true;
+      stopMeter(); if(pc){pc.close();pc=null;}
+      if(micStream){micStream.getTracks().forEach(t=>t.stop());}
+      startBtn.disabled=false; hangBtn.disabled=true;
       log('[call] ended.');
     }
-
     startBtn.addEventListener('click', startCall);
     hangBtn.addEventListener('click', hangUp);
 
-    // ----------------------- INIT -----------------------
-    if(anchor){
-      applyMouthLayout();
-      log(`[anchor] restored x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
-    }else{
-      // default approximate anchor (center of lips)
-      anchor = { x:0.505, y:0.345 };
-      saveAnchor();
-      applyMouthLayout();
-      log('[anchor] default set (click to re-anchor).');
-    }
-    wLabel.textContent = `${wSlider.value} px`;
+    if(anchor){ applyMouthLayout(); log('[anchor] restored'); }
+    else{ anchor={x:0.505,y:0.345}; saveAnchor(); applyMouthLayout(); log('[anchor] default set'); }
+    wLabel.textContent = wSlider.value+' px';
   </script>
 </body>
 </html>
