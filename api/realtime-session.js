@@ -1,49 +1,43 @@
-// /api/realtime-session.js (Vercel Edge/Node function)
+// /api/realtime-session.js
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).send('Method Not Allowed');
-  }
-
   try {
-    // Expect RAW SDP in the request body
-    const offerSdp = await getRawBody(req);
-    if (!offerSdp || !offerSdp.includes('v=')) {
-      return res.status(400).send('Bad SDP offer');
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
     }
 
-    const r = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
+    // 1) Read the browser's OFFER SDP
+    const { sdp, voice } = req.body || {};
+    if (!sdp) {
+      res.status(400).json({ error: 'Missing offer SDP' });
+      return;
+    }
+
+    // 2) Forward the OFFER directly to OpenAI Realtime as application/sdp
+    //    (Replace with your Realtime model & account endpoint if needed)
+    const upstream = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         'Content-Type': 'application/sdp',
-        'Accept': 'application/sdp',
-        'OpenAI-Beta': 'realtime=v1'
       },
-      body: offerSdp
+      // IMPORTANT: body is the RAW OFFER (NO JSON.stringify)
+      body: sdp,
     });
 
-    const answerSdp = await r.text();
-    if (!r.ok) {
-      res.status(r.status).send(answerSdp);
+    if (!upstream.ok) {
+      const txt = await upstream.text();
+      res.status(upstream.status).json({ error: JSON.parse(txt).error || txt });
       return;
     }
 
-    // Return RAW SDP back to the browser
-    res.setHeader('Content-Type', 'application/sdp');
-    res.status(200).send(answerSdp);
-  } catch (err) {
-    res.status(500).send((err && err.message) || String(err));
-  }
-}
+    // 3) Get the ANSWER SDP as plain text
+    const answerSDP = await upstream.text();
 
-// Read raw text body helper
-function getRawBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.setEncoding('utf8');
-    req.on('data', chunk => data += chunk);
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
-  });
+    // 4) Return JSON {answer: "<RAW_ANSWER_SDP>"} to the browser
+    res.status(200).json({ answer: answerSDP });
+
+  } catch (err) {
+    res.status(500).json({ error: (err && err.message) || String(err) });
+  }
 }
