@@ -1,43 +1,57 @@
 // /api/realtime-session.js
+// Vercel Serverless Function (Node.js)
+// Requires env var: OPENAI_API_KEY
+
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   try {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method not allowed' });
-      return;
-    }
-
-    // 1) Read the browser's OFFER SDP
     const { sdp, voice } = req.body || {};
-    if (!sdp) {
-      res.status(400).json({ error: 'Missing offer SDP' });
-      return;
+    if (!sdp || typeof sdp !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid "sdp" in body' });
     }
 
-    // 2) Forward the OFFER directly to OpenAI Realtime as application/sdp
-    //    (Replace with your Realtime model & account endpoint if needed)
-    const upstream = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Server missing OPENAI_API_KEY' });
+    }
+
+    // Choose the realtime model; adjust to the latest available in your account
+    const model = 'gpt-4o-realtime-preview';
+
+    // Forward the SDP offer to OpenAI Realtime; receive the SDP answer as plain text
+    const resp = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/sdp',
+        'OpenAI-Beta': 'realtime=v1',
+        // Set the TTS voice to use on the server side
+        'X-OpenAI-Audio-Voice': voice || 'alloy'
       },
-      // IMPORTANT: body is the RAW OFFER (NO JSON.stringify)
-      body: sdp,
+      body: sdp
     });
 
-    if (!upstream.ok) {
-      const txt = await upstream.text();
-      res.status(upstream.status).json({ error: JSON.parse(txt).error || txt });
-      return;
+    const answerText = await resp.text();
+
+    if (!resp.ok) {
+      // Pass through OpenAI error payload for easier debugging
+      return res.status(resp.status).send(answerText);
     }
 
-    // 3) Get the ANSWER SDP as plain text
-    const answerSDP = await upstream.text();
-
-    // 4) Return JSON {answer: "<RAW_ANSWER_SDP>"} to the browser
-    res.status(200).json({ answer: answerSDP });
-
+    // Return JSON with {answer: <SDP string>}
+    return res.status(200).json({ answer: answerText });
   } catch (err) {
-    res.status(500).json({ error: (err && err.message) || String(err) });
+    return res.status(500).json({ error: String(err && err.message || err) });
   }
 }
