@@ -1,261 +1,252 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>EmotiKnow — Emma (Voice Companion)</title>
-<style>
-  :root{
-    --bg:#0c0f12; --panel:#12161b; --text:#e7edf5; --muted:#9fb0c3; --brand:#4ea3ff;
-  }
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--text); font:14px/1.4 ui-sans-serif,system-ui,Inter,Arial;
-       display:flex; gap:22px; padding:18px;}
-  .stage{flex:1; min-height:70vh; display:grid; place-items:center; background:#080a0d; border-radius:14px; overflow:hidden}
-  .fit{width:100%; height:100%; display:grid; place-items:center}
-  .canvas{position:relative; width:min(1100px,95vw); aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden}
-  .emma-bg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; user-select:none; pointer-events:none}
-  /* Mouth overlay */
-  #mouth{
-    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-    width:140px; height:auto; object-fit:contain; image-rendering:auto;
-    pointer-events:none; user-select:none;
-  }
-  /* feather edge via subtle shadow */
-  .feather-0 { filter: drop-shadow(0 0 0 transparent); }
-  .feather-1 { filter: drop-shadow(0 0 2px rgba(0,0,0,.25)); }
-  .feather-2 { filter: drop-shadow(0 0 4px rgba(0,0,0,.3)); }
-  .feather-3 { filter: drop-shadow(0 0 6px rgba(0,0,0,.35)); }
-  .dot{position:absolute; width:10px; height:10px; border-radius:50%; background:#7bd9b5;
-       box-shadow:0 0 0 3px rgba(123,217,181,.25); transform:translate(-50%,-50%); pointer-events:none}
-  aside{width:390px; background:var(--panel); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:16px}
-  h1{margin:0 0 6px 0; font-size:18px}
-  .row{display:flex; gap:10px; align-items:center}
-  button{appearance:none; border:0; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer}
-  #startBtn{background:var(--brand); color:#06101a}
-  #hangBtn{background:#1b2430; color:var(--text)}
-  label{color:var(--muted); font-size:12px}
-  input[type="range"]{width:100%}
-  select{width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2b3644; background:#0d131a; color:var(--text)}
-  pre{white-space:pre-wrap; background:#0a0f14; color:#bcd0e4; padding:12px; border-radius:10px; height:170px; overflow:auto}
-  .hint{font-size:12px; color:var(--muted); border:1px dashed #2a3442; padding:10px; border-radius:10px}
-</style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>EmotiKnow — Emma (Voice Companion)</title>
+  <style>
+    :root{--bg:#0c0f12;--panel:#12161b;--text:#e7edf5;--muted:#9fb0c3;--brand:#4ea3ff}
+    *{box-sizing:border-box} body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Inter,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text);display:flex;gap:22px;padding:20px}
+    .stage{flex:1;min-height:70vh;display:grid;place-items:center;background:#080a0d;border-radius:14px;overflow:hidden}
+    .fit{width:100%;height:100%;display:grid;place-items:center}
+    .canvas{position:relative;width:min(1100px,95vw);aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+    .emma{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;user-select:none;pointer-events:none}
+    #mouth{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:200px;user-select:none;pointer-events:none;filter:url(#feather) drop-shadow(0 0 0 transparent)}
+    .anchor-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:#7bd9b5;box-shadow:0 0 0 3px rgba(123,217,181,.25);transform:translate(-50%,-50%);pointer-events:none}
+    .panel{width:400px;background:var(--panel);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:16px}
+    .row{display:flex;gap:10px}
+    button{appearance:none;border:0;padding:10px 16px;border-radius:10px;font-weight:600;color:#081018;background:var(--brand);cursor:pointer}
+    button.secondary{background:#1b2430;color:var(--text)} button:disabled{opacity:.6;cursor:not-allowed}
+    .ctrl{display:flex;flex-direction:column;gap:6px} .ctrl label{font-size:12px;color:var(--muted)}
+    input[type="range"]{width:100%} select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2b3644;background:#0d131a;color:var(--text)}
+    pre{white-space:pre-wrap;background:#0a0f14;padding:12px;border-radius:10px;font-size:12px;color:#bcd0e4;max-height:240px;overflow:auto}
+    .tip{font-size:12px;color:var(--muted);border:1px dashed #2a3442;padding:10px;border-radius:10px}
+  </style>
 </head>
 <body>
   <div class="stage">
     <div class="fit">
       <div class="canvas" id="canvas">
-        <img id="bg" class="emma-bg" src="/emma.jpg" alt="Emma" />
-        <img id="mouth" class="feather-2" src="/mouth/mouth_closed.png" alt="mouth overlay" />
-        <div id="anchorDot" class="dot" style="display:none"></div>
+        <img class="emma" id="bg" src="/emma.jpg" alt="Emma"/>
+        <img id="mouth" src="/mouth/mouth_closed.png" alt="mouth"/>
+        <div id="anchorDot" class="anchor-dot" style="display:none"></div>
+        <!-- SVG feather (soft edge) -->
+        <svg width="0" height="0">
+          <filter id="feather"><feGaussianBlur stdDeviation="0.001"></feGaussianBlur></filter>
+        </svg>
       </div>
     </div>
   </div>
 
-  <aside>
-    <h1>EmotiKnow — Emma (Voice Companion)</h1>
+  <aside class="panel">
+    <h2>EmotiKnow — Emma (Voice Companion)</h2>
 
     <div class="row">
       <button id="startBtn">Start</button>
-      <button id="hangBtn" disabled>Hang Up</button>
+      <button id="hangBtn" class="secondary" disabled>Hang Up</button>
     </div>
 
-    <label class="row" style="gap:10px;align-items:center">
-      <input type="checkbox" id="connectVoice" checked />
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+      <input type="checkbox" id="connectVoice" checked>
       Connect voice (uses <code>/api/realtime-session</code>)
     </label>
 
-    <div>
+    <div class="ctrl">
       <label>Target width (mouth) <span id="wLabel">140 px</span></label>
-      <input type="range" id="mouthWidth" min="80" max="280" step="2" value="140" />
+      <input id="mouthWidth" type="range" min="80" max="280" step="2" value="140"/>
     </div>
 
-    <div>
+    <div class="ctrl">
       <label>Smooth (higher = slower)</label>
-      <input type="range" id="smooth" min="0.50" max="0.95" step="0.01" value="0.80" />
+      <input id="smooth" type="range" min="0.50" max="0.95" step="0.01" value="0.85"/>
     </div>
 
-    <div>
+    <div class="ctrl">
       <label>Gate (ignore background)</label>
-      <input type="range" id="gate" min="0.00" max="0.40" step="0.01" value="0.15" />
+      <input id="gate" type="range" min="0.00" max="0.40" step="0.01" value="0.14"/>
     </div>
 
-    <div>
-      <label>Voice “personality”</label>
-      <select id="voiceSel">
+    <div class="ctrl">
+      <label>Voice “personality” (only if connected)</label>
+      <select id="voiceSelect">
         <option value="warm">Warm (gentle, kind)</option>
         <option value="shimmer">Shimmer (bright)</option>
         <option value="ballad">Ballad (neutral)</option>
       </select>
     </div>
 
-    <div>
+    <div class="ctrl">
       <label>Mouth size (scale)</label>
-      <input type="range" id="mouthScale" min="0.50" max="1.60" step="0.01" value="0.95" />
+      <input id="mouthScale" type="range" min="0.50" max="1.60" step="0.01" value="1.00"/>
     </div>
 
-    <div>
-      <label>Edge feather</label>
-      <input type="range" id="feather" min="0" max="3" step="1" value="2" />
+    <div class="ctrl">
+      <label>Edge feather (softer edge)</label>
+      <input id="feather" type="range" min="0" max="3" step="0.05" value="0.6"/>
     </div>
 
-    <div class="hint">
-      Click Emma’s <b>real mouth</b> once to anchor the overlay. Saved locally per browser.
-    </div>
+    <div class="tip">Click Emma’s <b>real mouth</b> once to anchor the overlay. Saved per browser.</div>
 
     <pre id="log">[app] ready.</pre>
   </aside>
 
-<script>
-/* ------------ CONFIG ------------- */
-const MOUTH = {
-  closed: "/mouth/mouth_closed.png",
-  half:   "/mouth/mouth_half.png",
-  open:   "/mouth/mouth_open.png",
-};
+  <script>
+    /* ---------- assets ---------- */
+    const FRAMES = {
+      closed: '/mouth/mouth_closed.png',
+      half:   '/mouth/mouth_half.png',
+      open:   '/mouth/mouth_open.png'
+    };
 
-/* ------------ ELEMENTS ------------- */
-const canvas = document.getElementById("canvas");
-const mouthEl = document.getElementById("mouth");
-const anchorDot = document.getElementById("anchorDot");
-const wSlider = document.getElementById("mouthWidth");
-const wLabel  = document.getElementById("wLabel");
-const smooth  = document.getElementById("smooth");
-const gate    = document.getElementById("gate");
-const scale   = document.getElementById("mouthScale");
-const feather = document.getElementById("feather");
-const startBtn = document.getElementById("startBtn");
-const hangBtn  = document.getElementById("hangBtn");
-const connectVoice = document.getElementById("connectVoice");
-const logEl = document.getElementById("log");
-const voiceSel = document.getElementById("voiceSel");
+    /* ---------- dom ---------- */
+    const canvas = document.getElementById('canvas');
+    const mouth  = document.getElementById('mouth');
+    const dot    = document.getElementById('anchorDot');
 
-function log(s){ logEl.textContent += "\n"+s; logEl.scrollTop = logEl.scrollHeight; }
+    const startBtn = document.getElementById('startBtn');
+    const hangBtn  = document.getElementById('hangBtn');
+    const connectVoice = document.getElementById('connectVoice');
 
-/* ------------ ANCHOR ------------- */
-let anchor = JSON.parse(localStorage.getItem("emma.anchor")||"null");
-function saveAnchor(){ localStorage.setItem("emma.anchor", JSON.stringify(anchor)); }
-function applyMouthLayout(){
-  if(!anchor) return;
-  const pxW = parseInt(wSlider.value,10) * parseFloat(scale.value);
-  mouthEl.style.left = (anchor.x*100)+"%";
-  mouthEl.style.top  = (anchor.y*100)+"%";
-  mouthEl.style.width = pxW+"px";
-  anchorDot.style.display = "block";
-  anchorDot.style.left = mouthEl.style.left;
-  anchorDot.style.top  = mouthEl.style.top;
-}
-canvas.addEventListener("click",(e)=>{
-  const r = canvas.getBoundingClientRect();
-  anchor = { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height };
-  saveAnchor(); applyMouthLayout();
-  log(`[anchor] saved x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
-});
-wSlider.addEventListener("input",()=>{ wLabel.textContent = wSlider.value+" px"; applyMouthLayout();});
-scale.addEventListener("input",applyMouthLayout);
-feather.addEventListener("input",()=> {
-  mouthEl.classList.remove("feather-0","feather-1","feather-2","feather-3");
-  mouthEl.classList.add(`feather-${feather.value}`);
-});
+    const wSlider = document.getElementById('mouthWidth');
+    const wLabel  = document.getElementById('wLabel');
+    const sSlider = document.getElementById('smooth');
+    const gSlider = document.getElementById('gate');
+    const scaleSlider = document.getElementById('mouthScale');
+    const featherSlider = document.getElementById('feather');
+    const voiceSelect = document.getElementById('voiceSelect');
+    const logEl = document.getElementById('log');
 
-/* ------------ AUDIO METER & MOUTH PICK ------------- */
-let ctx, analyser, micStream, rafId, lvlSmooth=0;
-function pickByLevel(level){
-  if (level > 0.32) return MOUTH.open;
-  if (level > 0.16) return MOUTH.half;
-  return MOUTH.closed;
-}
-function startMeter(stream){
-  ctx = new (window.AudioContext||window.webkitAudioContext)();
-  const src = ctx.createMediaStreamSource(stream);
-  analyser = ctx.createAnalyser();
-  src.connect(analyser);
-  analyser.fftSize = 2048;
-  const buf = new Uint8Array(analyser.fftSize);
-  function step(){
-    analyser.getByteTimeDomainData(buf);
-    let peak = 0;
-    for (let i=0;i<buf.length;i++){
-      const v = Math.abs(buf[i]-128)/128; if (v>peak) peak=v;
+    function log(msg){ logEl.textContent += '\n' + msg; logEl.scrollTop = logEl.scrollHeight; }
+
+    /* ---------- anchor ---------- */
+    let anchor = JSON.parse(localStorage.getItem('emma.anchor')||'null');
+    function saveAnchor(){ localStorage.setItem('emma.anchor', JSON.stringify(anchor)); }
+
+    function layout(){
+      if(!anchor) return;
+      mouth.style.left = `${anchor.x*100}%`;
+      mouth.style.top  = `${anchor.y*100}%`;
+      mouth.style.width = (parseInt(wSlider.value,10) * parseFloat(scaleSlider.value)) + 'px';
+      dot.style.display = 'block';
+      dot.style.left = mouth.style.left; dot.style.top = mouth.style.top;
     }
-    const s = parseFloat(smooth.value);
-    lvlSmooth = lvlSmooth*s + (1-s)*peak;
-    const g = parseFloat(gate.value);
-    const active = Math.max(0, lvlSmooth - g) / (1-g + 1e-6);
 
-    const srcPath = pickByLevel(active);
-    if (mouthEl.dataset.src !== srcPath){
-      mouthEl.dataset.src = srcPath;
-      mouthEl.src = srcPath;
+    canvas.addEventListener('click',(e)=>{
+      const r = canvas.getBoundingClientRect();
+      anchor = { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height };
+      saveAnchor(); layout();
+      log(`[anchor] saved x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
+    });
+
+    wSlider.addEventListener('input',()=>{ wLabel.textContent = wSlider.value+' px'; layout(); });
+    scaleSlider.addEventListener('input', layout);
+    featherSlider.addEventListener('input', ()=>{
+      const g = featherSlider.value;
+      document.querySelector('#feather feGaussianBlur').setAttribute('stdDeviation', g);
+    });
+
+    /* ---------- meter (independent of call) ---------- */
+    let ctx, analyser, buf, raf, micStream, level=0;
+    function pick(level){
+      if(level > 0.28) return FRAMES.open;
+      if(level > 0.14) return FRAMES.half;
+      return FRAMES.closed;
     }
-    rafId = requestAnimationFrame(step);
-  }
-  step();
-}
-function stopMeter(){
-  if (rafId) cancelAnimationFrame(rafId), rafId=null;
-  if (ctx) ctx.close(), ctx=null;
-}
+    function resumeCtx(){ if(ctx && ctx.state === 'suspended') ctx.resume(); }
+    document.addEventListener('visibilitychange', resumeCtx);
+    setInterval(resumeCtx, 4000);
 
-/* ------------ WEBRTC (to OpenAI Realtime via /api/realtime-session) ------------- */
-let pc, speaker;
-async function startCall(){
-  if (pc) return;
-  try{
-    micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-    log("[mic] granted.");
-    startMeter(micStream);
+    async function startMeter(){
+      if(micStream) return;
+      ctx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      buf = new Uint8Array(analyser.fftSize);
 
-    pc = new RTCPeerConnection();
-    micStream.getTracks().forEach(t=>pc.addTrack(t,micStream));
+      micStream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const src = ctx.createMediaStreamSource(micStream);
+      src.connect(analyser);
+      log('[mic] granted.');
 
-    // play returned audio
-    speaker = new Audio();
-    speaker.autoplay = true;
-    pc.ontrack = (e)=>{ speaker.srcObject = e.streams[0]; };
+      const smooth = ()=> parseFloat(sSlider.value);
+      const gate   = ()=> parseFloat(gSlider.value);
 
-    pc.onconnectionstatechange = ()=> log(`[pc] ${pc.connectionState}`);
-
-    const offer = await pc.createOffer({ offerToReceiveAudio:true });
-    await pc.setLocalDescription(offer);
-
-    if (connectVoice.checked){
-      // exchange SDP via our serverless function
-      const resp = await fetch("/api/realtime-session", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ sdp: offer.sdp, voice: voiceSel.value })
-      });
-      if (!resp.ok){
-        const err = await resp.text();
-        log(`[error] token http ${resp.status}\n${err}`);
-        return hangUp();
+      function tick(){
+        analyser.getByteTimeDomainData(buf);
+        let peak=0; for(let i=0;i<buf.length;i++){ const v=Math.abs(buf[i]-128)/128; if(v>peak) peak=v; }
+        level = level*smooth() + (1-smooth())*peak;
+        const act = Math.max(0, level - gate()) / (1-gate()+1e-6);
+        const srcPath = pick(act);
+        if(mouth.dataset.src !== srcPath){ mouth.dataset.src = srcPath; mouth.src = srcPath; }
+        raf = requestAnimationFrame(tick);
       }
-      const data = await resp.json(); // -> {answer: "<sdp string>"}
-      await pc.setRemoteDescription({ type:"answer", sdp:data.answer });
-      log("[sdp] handshake complete.");
-    } else {
-      log("[info] Voice disabled (checkbox off).");
+      tick();
+    }
+    function stopMeter(){
+      if(raf) cancelAnimationFrame(raf);
+      raf=null; level=0;
+      if(ctx){ ctx.close(); ctx=null; }
+      if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
     }
 
-    startBtn.disabled = true; hangBtn.disabled = false;
-  }catch(err){
-    log("[error] "+(err?.message||err)); hangUp();
-  }
-}
-function hangUp(){
-  stopMeter();
-  if (pc){ pc.close(); pc=null; }
-  if (micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
-  startBtn.disabled=false; hangBtn.disabled=true;
-  log("[call] ended.");
-}
-startBtn.addEventListener("click", startCall);
-hangBtn.addEventListener("click", hangUp);
+    /* ---------- realtime call (optional) ---------- */
+    let pc, dc, keepTimer;
+    async function startCall(){
+      if(pc) return;
+      pc = new RTCPeerConnection();
+      if(micStream){ micStream.getTracks().forEach(t=>pc.addTrack(t, micStream)); }
 
-/* ------------ INIT ------------- */
-if (!anchor){ anchor = {x:0.51, y:0.31}; log("[anchor] default set (click to re-anchor)."); saveAnchor(); }
-applyMouthLayout(); wLabel.textContent = wSlider.value+" px"; log("[app] ready.");
-</script>
+      dc = pc.createDataChannel('ping');
+      dc.onopen = ()=>{ keepTimer = setInterval(()=> dc.send('ping'), 10000); };
+      dc.onclose = ()=>{ if(keepTimer) clearInterval(keepTimer); };
+
+      pc.onconnectionstatechange = ()=>{
+        log(`[pc] ${pc.connectionState}`);
+        if(['failed','disconnected','closed'].includes(pc.connectionState)){
+          log('[call] ended.');
+          // Important: DO NOT stop meter here. It stays independent.
+          if(pc){ pc.close(); pc=null; }
+        }
+      };
+
+      const offer = await pc.createOffer({offerToReceiveAudio:true});
+      await pc.setLocalDescription(offer);
+
+      const res = await fetch('/api/realtime-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp: offer.sdp, voice: voiceSelect.value})});
+      if(!res.ok){
+        log(`[error] token http ${res.status}\n` + await res.text());
+        if(pc){ pc.close(); pc=null; }
+        return;
+      }
+      const data = await res.json(); // expects {sdp: "..."}
+      await pc.setRemoteDescription({type:'answer', sdp:data.sdp});
+      log('[sdp] handshake complete.');
+    }
+    function hangUp(){
+      if(pc){ pc.close(); pc=null; }
+      if(keepTimer) { clearInterval(keepTimer); keepTimer=null; }
+      log('[call] ended.');
+      // Meter keeps running unless user clicks Hang Up again.
+    }
+
+    /* ---------- buttons ---------- */
+    startBtn.addEventListener('click', async ()=>{
+      await startMeter();           // always start the mouth
+      if(connectVoice.checked){     // optionally start the call
+        await startCall();
+      }
+      startBtn.disabled = true; hangBtn.disabled = false;
+    });
+
+    hangBtn.addEventListener('click', ()=>{
+      if(pc) hangUp();
+      else stopMeter();
+      startBtn.disabled = false; hangBtn.disabled = true;
+    });
+
+    /* ---------- init ---------- */
+    if(!anchor){ anchor = {x:0.510, y:0.312}; saveAnchor(); log('[anchor] default set (click to re-anchor).'); }
+    layout(); wLabel.textContent = wSlider.value+' px';
+  </script>
 </body>
 </html>
