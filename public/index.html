@@ -4,46 +4,73 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EmotiKnow — Emma (Voice Companion)</title>
+
   <style>
     :root{
       --bg:#0c0f12; --panel:#12161b; --text:#e7edf5; --muted:#9fb0c3; --brand:#4ea3ff;
-      --accent:#7bd9b5;
+      --accent:#7bd9b5; --danger:#ff7a7a;
     }
     *{box-sizing:border-box}
-    body{margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Inter,Segoe UI,Roboto,Arial;
-         background:var(--bg); color:var(--text); display:flex; gap:22px; padding:20px;}
-    .stage{flex:1; min-height:70vh; display:grid; place-items:center; background:#080a0d;
-           border-radius:14px; overflow:hidden; position:relative;}
-    .fitbox{width:100%; height:100%; display:grid; place-items:center;}
-    .canvas{position:relative; width:min(1100px,95vw); aspect-ratio:16/9; background:#000;
-            border-radius:12px; overflow:hidden;}
-    .emma-bg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-             user-select:none; pointer-events:none;}
-    #mouth{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-           width:200px; user-select:none; pointer-events:none;
-           filter: drop-shadow(0 0 0 transparent);}
-    .anchor-dot{position:absolute; width:10px; height:10px; border-radius:50%;
-                background:var(--accent); box-shadow:0 0 0 3px rgba(123,217,181,.25);
-                transform:translate(-50%,-50%); pointer-events:none; opacity:.9;}
-    .panel{width:420px; background:var(--panel); border-radius:14px; padding:18px;
-           display:flex; flex-direction:column; gap:18px;}
-    h1{font-size:20px; margin:0 0 6px}
+    body{
+      margin:0; font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+      background:var(--bg); color:var(--text); display:flex; gap:22px; padding:20px;
+    }
+    .stage{
+      flex:1; min-height:70vh; display:grid; place-items:center;
+      background:#080a0d; border-radius:14px; overflow:hidden; position:relative;
+    }
+    .fitbox{ width:100%; height:100%; display:grid; place-items:center; }
+    .canvas{
+      position:relative; width:min(1100px, 95vw); aspect-ratio:16/9;
+      background:#000; border-radius:12px; overflow:hidden;
+    }
+    .emma-bg{
+      position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+      user-select:none; pointer-events:none;
+    }
+    /* Mouth overlay */
+    #mouth{
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:200px; image-rendering:auto; user-select:none; pointer-events:none;
+      /* the soft edge is applied via CSS mask (set in JS) */
+      filter: drop-shadow(0 0 0 transparent);
+    }
+    /* Anchor marker */
+    .anchor-dot{
+      position:absolute; width:10px; height:10px; border-radius:50%;
+      background:var(--accent); box-shadow:0 0 0 3px rgba(123,217,181,.25);
+      transform:translate(-50%,-50%); pointer-events:none; opacity:.85;
+    }
+
+    .panel{
+      width:400px; background:var(--panel); border-radius:14px; padding:18px;
+      display:flex; flex-direction:column; gap:18px;
+    }
+    h1{font-size:20px; margin:0 0 6px 0}
     .row{display:flex; gap:10px; align-items:center}
-    button{appearance:none; border:0; padding:10px 16px; border-radius:10px; font-weight:600;
-           color:#081018; background:var(--brand); cursor:pointer;}
-    button.secondary{background:#1b2430; color:var(--text)}
+    button{
+      appearance:none; border:0; padding:10px 16px; border-radius:10px; font-weight:600;
+      color:#081018; background:var(--brand); cursor:pointer;
+    }
+    button.secondary{ background:#1b2430; color:var(--text); }
     button:disabled{opacity:.6; cursor:not-allowed}
     .ctrl{display:flex; flex-direction:column; gap:8px}
     .ctrl label{font-size:12px; color:var(--muted)}
-    .ctrl input[type="range"]{width:100%}
-    select{width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2b3644;
-           background:#0d131a; color:var(--text)}
+    .ctrl input[type="range"]{ width:100% }
+    select{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2b3644;
+      background:#0d131a; color:var(--text);
+    }
     details{border-top:1px solid #1e2732; padding-top:10px}
     summary{cursor:pointer; color:var(--muted)}
-    pre{white-space:pre-wrap; background:#0a0f14; padding:12px; border-radius:10px;
-        font-size:12px; color:#bcd0e4; max-height:240px; overflow:auto;}
-    .tip{font-size:12px; color:var(--muted); border:1px dashed #2a3442; padding:10px; border-radius:10px;}
-    .tiny{font-size:12px; color:var(--muted)}
+    pre{
+      white-space:pre-wrap; background:#0a0f14; padding:12px; border-radius:10px;
+      font-size:12px; color:#bcd0e4; max-height:240px; overflow:auto;
+    }
+    .tip{
+      font-size:12px; color:var(--muted);
+      border:1px dashed #2a3442; padding:10px; border-radius:10px;
+    }
   </style>
 </head>
 <body>
@@ -53,10 +80,10 @@
         <!-- Background -->
         <img id="bg" class="emma-bg" src="/emma.jpg" alt="Emma" />
 
-        <!-- Mouth overlay (we only swap its src) -->
-        <img id="mouth" src="/mouth/mouth_closed.png" alt="mouth overlay" />
+        <!-- Mouth overlay (we only swap its src). Add ?v=4 to bust cache when you replace assets. -->
+        <img id="mouth" src="/mouth/mouth_closed.png?v=4" alt="mouth overlay" />
 
-        <!-- anchor indicator -->
+        <!-- Anchor indicator -->
         <div id="anchorDot" class="anchor-dot" style="display:none;"></div>
       </div>
     </div>
@@ -70,9 +97,9 @@
       <button id="hangBtn" class="secondary" disabled>Hang Up</button>
     </div>
 
-    <label class="row tiny" style="gap:8px;">
-      <input id="connectVoice" type="checkbox" />
-      <span>Connect voice (uses <code>/api/realtime-session</code>)</span>
+    <label style="display:flex; gap:10px; align-items:center; font-size:13px; color:var(--muted)">
+      <input type="checkbox" id="connectVoice" checked />
+      Connect voice (uses /api/realtime-session)
     </label>
 
     <div class="ctrl">
@@ -82,12 +109,12 @@
 
     <div class="ctrl">
       <label>Smooth (higher = slower)</label>
-      <input type="range" id="smooth" min="0.50" max="0.95" step="0.01" value="0.80" />
+      <input type="range" id="smooth" min="0.50" max="0.95" step="0.01" value="0.85" />
     </div>
 
     <div class="ctrl">
       <label>Gate (ignore background)</label>
-      <input type="range" id="gate" min="0.00" max="0.40" step="0.01" value="0.15" />
+      <input type="range" id="gate" min="0.00" max="0.40" step="0.01" value="0.14" />
     </div>
 
     <div class="ctrl">
@@ -106,11 +133,11 @@
 
     <div class="ctrl">
       <label>Edge feather</label>
-      <input type="range" id="feather" min="0" max="12" step="0.5" value="3.5" />
+      <input type="range" id="feather" min="0" max="100" step="1" value="32" />
     </div>
 
     <div class="tip">
-      Click Emma’s <b>real mouth</b> once to anchor the overlay.<br>
+      Click Emma’s <b>real mouth</b> once to anchor the overlay.
       The position & sizing are saved per browser.
     </div>
 
@@ -120,43 +147,37 @@
     </details>
   </aside>
 
-  <audio id="remoteAudio" autoplay playsinline></audio>
-
   <script>
-    // ---------------- Assets: your transparent PNGs ----------------
-    const MOUTH_FRAMES = {
-      closed: '/mouth/mouth_closed.png',
-      mid:    '/mouth/mouth_half.png',     // rename your file to mouth_half.png
-      open:   '/mouth/mouth_open.png'
-    };
-
-    function pickMouthByLevel(level){
-      if (level > 0.34) return MOUTH_FRAMES.open;
-      if (level > 0.20) return MOUTH_FRAMES.mid;
-      return MOUTH_FRAMES.closed;
-    }
-
-    // ---------------- Elements ----------------
-    const mouthEl     = document.getElementById('mouth');
-    const canvas      = document.getElementById('canvas');
-    const anchorDot   = document.getElementById('anchorDot');
-    const remoteAudio = document.getElementById('remoteAudio');
-
-    const wSlider = document.getElementById('mouthWidth');
-    const wLabel  = document.getElementById('wLabel');
-    const sSlider = document.getElementById('smooth');
-    const gSlider = document.getElementById('gate');
-    const scaleSlider = document.getElementById('mouthScale');
+    // ----------------------- ELEMENTS -----------------------
+    const mouthEl    = document.getElementById('mouth');
+    const canvas     = document.getElementById('canvas');
+    const anchorDot  = document.getElementById('anchorDot');
+    const wSlider    = document.getElementById('mouthWidth');
+    const wLabel     = document.getElementById('wLabel');
+    const sSlider    = document.getElementById('smooth');
+    const gSlider    = document.getElementById('gate');
+    const scaleSlider= document.getElementById('mouthScale');
     const featherSlider = document.getElementById('feather');
-    const voiceSelect = document.getElementById('voiceSelect');
-    const connectVoice = document.getElementById('connectVoice');
+    const voiceSelect= document.getElementById('voiceSelect');
+    const connectVoiceCb = document.getElementById('connectVoice');
 
     const startBtn = document.getElementById('startBtn');
     const hangBtn  = document.getElementById('hangBtn');
     const logEl    = document.getElementById('log');
-    function log(line){ logEl.textContent += "\\n" + line; logEl.scrollTop = logEl.scrollHeight; }
 
-    // ---------------- Anchor positioning ----------------
+    // Hidden audio to play remote track (WebRTC)
+    const remoteAudio = new Audio();
+    remoteAudio.autoplay = true;
+    remoteAudio.playsInline = true;
+    remoteAudio.muted = false;
+    document.body.appendChild(remoteAudio);
+
+    function log(line){
+      logEl.textContent += "\n" + line;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // ----------------------- ANCHOR STORAGE -----------------------
     let anchor = JSON.parse(localStorage.getItem('emma.anchor') || 'null');
     function saveAnchor(){ localStorage.setItem('emma.anchor', JSON.stringify(anchor)); }
 
@@ -164,17 +185,24 @@
       if(!anchor) return;
       const pxWidth = parseInt(wSlider.value,10);
       const scale   = parseFloat(scaleSlider.value);
-      mouthEl.style.left = (anchor.x*100)+'%';
-      mouthEl.style.top  = (anchor.y*100)+'%';
+
+      mouthEl.style.left  = `${(anchor.x*100).toFixed(3)}%`;
+      mouthEl.style.top   = `${(anchor.y*100).toFixed(3)}%`;
       mouthEl.style.width = (pxWidth * scale) + 'px';
 
-      const feather = parseFloat(featherSlider.value);
-      mouthEl.style.filter = `drop-shadow(0 0 ${feather}px rgba(0,0,0,.45))`;
-
-      // show anchor point
       anchorDot.style.display = 'block';
-      anchorDot.style.left = mouthEl.style.left;
-      anchorDot.style.top  = mouthEl.style.top;
+      anchorDot.style.left  = mouthEl.style.left;
+      anchorDot.style.top   = mouthEl.style.top;
+    }
+
+    // Apply soft-edge feather via CSS mask
+    function applyFeather(){
+      const t = (parseFloat(featherSlider?.value ?? '0') / 100) || 0;
+      const hard = Math.max(40, 80 - 60 * t); // inner solid radius %
+      const soft = Math.min(98, hard + 10 + 20 * t); // fade to transparent
+      const mask = `radial-gradient(circle at 50% 62%, black ${hard}%, transparent ${soft}%)`;
+      mouthEl.style.webkitMaskImage = mask;
+      mouthEl.style.maskImage = mask;
     }
 
     canvas.addEventListener('click',(e)=>{
@@ -185,37 +213,77 @@
       applyMouthLayout();
     });
 
-    [wSlider, scaleSlider, featherSlider].forEach(sl => sl.addEventListener('input', ()=>{
+    wSlider.addEventListener('input',()=>{
       wLabel.textContent = `${wSlider.value} px`;
       applyMouthLayout();
-    }));
+    });
+    scaleSlider.addEventListener('input', applyMouthLayout);
+    featherSlider.addEventListener('input', applyFeather);
 
-    // ---------------- Mic-driven meter (works even without server) ----------------
+    // ----------------------- MOUTH FRAMES -----------------------
+    // Add ?v=4 to defeat CDN/browser cache when you replace the PNGs.
+    function bucketToSrc(bucket){
+      switch(bucket){
+        case 'open': return '/mouth/mouth_open.png?v=4';
+        case 'half': return '/mouth/mouth_half.png?v=4';
+        default:     return '/mouth/mouth_closed.png?v=4';
+      }
+    }
+    function pickBucket(level){
+      // simple 3-way with thresholds; tweak to your taste
+      if (level > 0.42) return 'open';
+      if (level > 0.24) return 'half';
+      return 'closed';
+    }
+
+    // ----------------------- AUDIO / METER -----------------------
     let ctx, analyser, micStream, rafId, levelSmooth=0;
-    async function startMeter(stream){
+
+    // hysteresis + throttle to reduce jitter
+    let lastSwap = 0;
+    let lastBucket = 'closed';
+    const order = { closed:0, half:1, open:2 };
+
+    function startMeter(stream){
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
       const src = ctx.createMediaStreamSource(stream);
       src.connect(analyser);
+      analyser.fftSize = 2048;
       const buf = new Uint8Array(analyser.fftSize);
 
       function tick(){
         analyser.getByteTimeDomainData(buf);
+
+        // crude peak estimate: max deviation from 128
         let peak = 0;
         for (let i=0;i<buf.length;i++){
-          const v = Math.abs(buf[i]-128)/128; if(v>peak) peak=v;
+          const v = Math.abs(buf[i]-128)/128;
+          if(v>peak) peak=v;
         }
-        const smooth = parseFloat(sSlider.value);
+        const smooth = parseFloat(sSlider.value);       // 0.50..0.95
         levelSmooth = levelSmooth * smooth + (1-smooth) * peak;
 
-        const gate = parseFloat(gSlider.value);
-        const level = Math.max(0, levelSmooth - gate) / (1-gate + 1e-6);
-        const srcPath = pickMouthByLevel(level);
-        if (mouthEl.dataset.src !== srcPath){
-          mouthEl.dataset.src = srcPath;
-          mouthEl.src = srcPath;
+        const gate = parseFloat(gSlider.value);         // 0.00..0.40
+        const activeLevel = Math.max(0, levelSmooth - gate) / (1-gate + 1e-6);
+
+        // Choose bucket with hysteresis + swap throttle
+        const now = performance.now();
+        const bucket = pickBucket(activeLevel);
+        const changed =
+          (bucket !== lastBucket) &&
+          (order[bucket] >= order[lastBucket] || now - lastSwap > 180);
+
+        if (changed) {
+          lastBucket = bucket;
+          lastSwap = now;
+          const srcPath = bucketToSrc(bucket);
+          if (mouthEl.dataset.src !== srcPath){
+            mouthEl.dataset.src = srcPath;
+            mouthEl.src = srcPath;
+          }
         }
+
         rafId = requestAnimationFrame(tick);
       }
       tick();
@@ -224,79 +292,106 @@
     function stopMeter(){
       if(rafId) cancelAnimationFrame(rafId);
       rafId = null;
-      if(ctx){ ctx.close(); ctx=null; }
+      if(ctx) { try{ctx.close();}catch{} ctx=null; }
     }
 
-    // ---------------- Optional Realtime call ----------------
+    // ----------------------- REALTIME CALL (optional) -----------------------
     let pc;
+
     async function startCall(){
+      if(pc) return;
+
       try{
         micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        startMeter(micStream);
         log('[mic] granted.');
-        await startMeter(micStream);
 
-        if (!connectVoice.checked){
-          // Mic-only lip sync
-          startBtn.disabled = true; hangBtn.disabled = false;
+        if (!connectVoiceCb.checked){
+          // Mic-only animation (no server call)
+          startBtn.disabled = true;
+          hangBtn.disabled  = false;
+          log('[call] local (animation only).');
           return;
         }
 
-        // With Realtime
         pc = new RTCPeerConnection();
-        micStream.getTracks().forEach(t => pc.addTrack(t, micStream));
-        pc.ontrack = (e)=> { if (e.streams[0]) remoteAudio.srcObject = e.streams[0]; };
+
+        // Attach remote track to hidden <audio> so you can hear Emma
+        pc.ontrack = (ev) => {
+          if (ev.streams && ev.streams[0]) {
+            remoteAudio.srcObject = ev.streams[0];
+            remoteAudio.play().catch(()=>{});
+          }
+        };
+
+        // Send mic up to server
+        micStream.getTracks().forEach(t=>pc.addTrack(t,micStream));
+
         pc.onconnectionstatechange = ()=> log(`[pc] ${pc.connectionState}`);
 
-        const offer = await pc.createOffer({ offerToReceiveAudio: true });
+        const offer = await pc.createOffer({ offerToReceiveAudio:true });
         await pc.setLocalDescription(offer);
 
-        // send RAW SDP, receive RAW SDP
+        // Exchange SDP via your route
         const res = await fetch('/api/realtime-session', {
           method:'POST',
-          headers:{
-            'Content-Type':'application/sdp',
-            'Accept':'application/sdp'
-          },
-          body: offer.sdp
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ sdp: offer.sdp, voice: voiceSelect.value })
         });
 
-        if (!res.ok){
+        if(!res.ok){
           const text = await res.text();
-          log(`[error] http ${res.status}\\n${text}`);
-          hangUp(); return;
+          log(`[error] token http ${res.status}\n${text}`);
+          hangUp();
+          return;
         }
 
-        const answer = await res.text();  // IMPORTANT: plain text SDP
-        await pc.setRemoteDescription({ type:'answer', sdp:answer });
+        // Accept several possible shapes: {answer}, {sdp}, or plain
+        let data;
+        try{ data = await res.json(); }catch{}
+        const answerSdp = data?.answer || data?.sdp || data || null;
+
+        if (!answerSdp || typeof answerSdp !== 'string' || !answerSdp.includes('v=')){
+          log('[error] server did not return a valid SDP answer.');
+          hangUp();
+          return;
+        }
+
+        await pc.setRemoteDescription({ type:'answer', sdp:answerSdp });
         log('[sdp] handshake complete.');
 
-        startBtn.disabled = true; hangBtn.disabled = false;
+        startBtn.disabled = true;
+        hangBtn.disabled  = false;
       }catch(err){
-        log('[error] ' + (err?.message||err));
+        log('[error] ' + (err?.message || String(err)));
         hangUp();
       }
     }
 
     function hangUp(){
       stopMeter();
-      if(pc){ pc.close(); pc=null; }
+      if(pc){ try{pc.close();}catch{} pc=null; }
       if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
-      startBtn.disabled = false; hangBtn.disabled = true;
+      startBtn.disabled = false;
+      hangBtn.disabled  = true;
       log('[call] ended.');
     }
 
     startBtn.addEventListener('click', startCall);
     hangBtn.addEventListener('click', hangUp);
 
-    // ---------------- Init ----------------
+    // ----------------------- INIT -----------------------
+    // restore anchor + initial layout
     if(anchor){
       applyMouthLayout();
+      applyFeather();
       log(`[anchor] restored x=${anchor.x.toFixed(3)}, y=${anchor.y.toFixed(3)}`);
-    } else {
-      // tuned default for your Emma image; tweak once, then it keeps saving
-      anchor = { x:0.512, y:0.305 };
+    }else{
+      // default approximate anchor (center of lips)
+      anchor = { x:0.512, y:0.309 };
       saveAnchor();
       applyMouthLayout();
+      applyFeather();
       log('[anchor] default set (click to re-anchor).');
     }
     wLabel.textContent = `${wSlider.value} px`;
