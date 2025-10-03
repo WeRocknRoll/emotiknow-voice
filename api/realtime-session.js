@@ -1,64 +1,49 @@
-// /api/realtime-session.js
-// Vercel/Next Edge runtime – forwards the browser's SDP offer to OpenAI
-// and returns the answer SDP as JSON { answer: "<sdp...>" }.
-
-export const config = { runtime: 'edge' }; // important for streaming/low latency
-
-export default async function handler(req) {
+// /api/realtime-session.js (Vercel Edge/Node function)
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    res.setHeader('Allow', 'POST');
+    return res.status(405).send('Method Not Allowed');
   }
 
   try {
-    const { sdp, voice } = await req.json();
-
-    if (!sdp || typeof sdp !== 'string') {
-      return new Response(JSON.stringify({ error: 'Missing SDP offer' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    // Expect RAW SDP in the request body
+    const offerSdp = await getRawBody(req);
+    if (!offerSdp || !offerSdp.includes('v=')) {
+      return res.status(400).send('Bad SDP offer');
     }
 
-    // Choose a realtime model. (Use the model your account has access to.)
-    const MODEL = 'gpt-4o-realtime-preview-2024-12-17';
-
-    // Forward the SDP offer to OpenAI Realtime:
-    const r = await fetch('https://api.openai.com/v1/realtime?model=' + encodeURIComponent(MODEL), {
+    const r = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         'Content-Type': 'application/sdp',
+        'Accept': 'application/sdp',
         'OpenAI-Beta': 'realtime=v1'
       },
-      // The body of this POST is the **raw** SDP string from the browser
-      body: sdp
+      body: offerSdp
     });
 
     const answerSdp = await r.text();
-
-    // Basic sanity check: real SDP answers contain a "v=" line
-    if (!/^v=\d/m.test(answerSdp)) {
-      return new Response(JSON.stringify({
-        error: 'Upstream did not return a valid SDP',
-        upstream: answerSdp.slice(0, 2000)
-      }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (!r.ok) {
+      res.status(r.status).send(answerSdp);
+      return;
     }
 
-    // Return JSON with the answer for the browser to consume.
-    return new Response(JSON.stringify({ answer: answerSdp, voice: voice || null }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    // Return RAW SDP back to the browser
+    res.setHeader('Content-Type', 'application/sdp');
+    res.status(200).send(answerSdp);
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err?.message || err) }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    res.status(500).send((err && err.message) || String(err));
   }
+}
+
+// Read raw text body helper
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
 }
