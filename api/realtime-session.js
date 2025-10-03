@@ -1,96 +1,62 @@
-// /api/realtime-session.ts
-// Vercel serverless function: exchanges WebRTC SDP with OpenAI Realtime API.
+// api/realtime-session.js
+// Node.js serverless function for Vercel.
+// Accepts JSON { sdp: "v=0..." } and returns { sdp: "answer..." } from OpenAI Realtime.
 
-export const config = {
-  runtime: "edge", // lowest-latency on Vercel
-};
+const MODEL = "gpt-4o-realtime-preview";
 
-const MODEL = "gpt-4o-realtime-preview"; // OpenAI Realtime model
-
-export default async function handler(req: Request) {
+module.exports = async (req, res) => {
   try {
     if (req.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
+      res.status(405).send("Method Not Allowed");
+      return;
     }
 
-    // Accept BOTH:
-    // 1) JSON: { sdp: "v=0..." }
-    // 2) Raw text body: "v=0..." (Content-Type: application/sdp)
-    let offerSdp = "";
-    const ct = req.headers.get("content-type") || "";
-
-    if (ct.includes("application/json")) {
-      const json = await req.json().catch(() => ({}));
-      offerSdp = (json?.sdp || json?.offer || "").toString().trim();
-    } else {
-      // fall back to text/plain or application/sdp
-      offerSdp = (await req.text()).trim();
-    }
+    const offerSdp = (req.body && (req.body.sdp || req.body.offer) || "").toString().trim();
 
     if (!offerSdp || !offerSdp.startsWith("v=")) {
-      return new Response(
-        JSON.stringify({
-          error: {
-            message:
-              "Invalid SDP offer. Send {sdp: 'v=0...'} JSON or raw SDP as body.",
-            code: "invalid_offer",
-          },
-        }),
-        { status: 400, headers: { "content-type": "application/json" } }
-      );
+      res.status(400).json({
+        error: {
+          message: "Invalid SDP offer. Send JSON: { sdp: 'v=0...' }",
+          code: "invalid_offer"
+        }
+      });
+      return;
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({
-          error: { message: "OPENAI_API_KEY is not set", code: "no_api_key" },
-        }),
-        { status: 500, headers: { "content-type": "application/json" } }
-      );
+      res.status(500).json({
+        error: { message: "OPENAI_API_KEY is not set", code: "no_api_key" }
+      });
+      return;
     }
 
-    // Proxy the offer to OpenAI Realtime (WebRTC over HTTP/SDP)
-    const openaiRes = await fetch(
+    const openaiResp = await fetch(
       `https://api.openai.com/v1/realtime?model=${encodeURIComponent(MODEL)}`,
       {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/sdp",
-          "OpenAI-Beta": "realtime=v1",
+          "OpenAI-Beta": "realtime=v1"
         },
-        body: offerSdp,
+        body: offerSdp
       }
     );
 
-    if (!openaiRes.ok) {
-      const text = await openaiRes.text();
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: "Upstream OpenAI error",
-            code: "openai_error",
-            detail: text,
-          },
-        }),
-        { status: 502, headers: { "content-type": "application/json" } }
-      );
+    if (!openaiResp.ok) {
+      const detail = await openaiResp.text().catch(() => "");
+      res.status(502).json({
+        error: { message: "OpenAI upstream error", code: "openai_error", detail }
+      });
+      return;
     }
 
-    const answerSdp = await openaiRes.text();
-
-    // You can return either raw SDP or JSON; your client expects JSON {sdp:"..."}
-    return new Response(JSON.stringify({ sdp: answerSdp }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
+    const answerSdp = await openaiResp.text();
+    res.status(200).json({ sdp: answerSdp });
+  } catch (err) {
+    res.status(500).json({
+      error: { message: err?.message || "Server error", code: "server_error" }
     });
-  } catch (err: any) {
-    return new Response(
-      JSON.stringify({
-        error: { message: err?.message || "Unknown error", code: "server_error" },
-      }),
-      { status: 500, headers: { "content-type": "application/json" } }
-    );
   }
-}
+};
