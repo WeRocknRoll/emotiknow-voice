@@ -4,127 +4,174 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EmotiKnow — Emma (D-ID + OpenAI)</title>
-  <link rel="stylesheet" href="/style.css" />
+  <style>
+    :root {
+      --bg:#0b0f14; --panel:#121821; --muted:#9fb0c3; --text:#e7edf5; --brand:#4ea3ff;
+      --btn:#2a3a52; --btn2:#204a34;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; padding:24px; background:var(--bg); color:var(--text);
+      font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    }
+    h1 { margin:0 0 16px 0; font-weight:800; letter-spacing:.2px; }
+    .grid {
+      display:grid; gap:22px;
+      grid-template-columns: minmax(280px, 560px) minmax(480px, 1fr);
+      align-items:start;
+    }
+    .card { background:var(--panel); border-radius:16px; padding:16px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    textarea {
+      width:100%; height:120px; resize:vertical; padding:12px 14px;
+      background:#0f141b; color:var(--text); border:1px solid #223142; border-radius:12px;
+      font-size:16px; line-height:1.4;
+    }
+    button {
+      appearance:none; border:0; border-radius:12px; padding:10px 14px; font-weight:700;
+      background:var(--btn); color:var(--text); cursor:pointer;
+    }
+    button.primary { background:var(--brand); color:#06101b; }
+    button.stop { background:#5b2030; }
+    .muted { color:var(--muted); font-size:13px; }
+    video, .video-frame {
+      width:100%; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden;
+      display:block;
+    }
+    #log {
+      background:#0a0f14; color:#bcd0e4; border-radius:12px; padding:12px; white-space:pre-wrap;
+      max-height:240px; overflow:auto; font-size:12px;
+    }
+    .pill { background:#17212c; color:var(--muted); padding:8px 10px; border-radius:999px; font-size:12px;}
+  </style>
 </head>
 <body>
-  <main class="wrap">
-    <h1>EmotiKnow — Emma (D-ID + OpenAI)</h1>
+  <h1>EmotiKnow — Emma (D-ID + OpenAI)</h1>
 
-    <section class="panel">
-      <label>Say or type something to Emma</label>
-      <textarea id="userText" rows="3" placeholder="Hi Emma, what can you do?"></textarea>
-
-      <div class="row">
-        <button id="speakBtn">Ask Emma</button>
-        <button id="micBtn" title="Use browser speech-to-text">🎙️ Dictate</button>
-        <button id="stopMicBtn" disabled>■ Stop</button>
+  <div class="grid">
+    <!-- Left: user input -->
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px;">Say or type something to Emma</div>
+      <textarea id="prompt" placeholder="Ask Emma anything…">hello</textarea>
+      <div class="row" style="margin-top:10px;">
+        <button id="askBtn" class="primary">Ask Emma</button>
+        <button id="micBtn">🎙️ Dictate</button>
+        <button id="stopBtn" class="stop">■ Stop</button>
+        <span id="status" class="pill">Ready.</span>
       </div>
+    </div>
 
-      <div id="status" class="status">Ready.</div>
-    </section>
+    <!-- Right: Emma video -->
+    <div class="card">
+      <video id="emmaVideo" class="video-frame" playsinline controls></video>
+      <div class="muted" style="margin-top:6px;">
+        If the video freezes, just click Ask again; a fresh talk will be generated.
+      </div>
+    </div>
+  </div>
 
-    <section class="stage">
-      <video id="emmaVideo" playsinline controls poster="/emma.jpg"></video>
-    </section>
+  <div class="card" style="margin-top:22px;">
+    <div class="muted" style="margin-bottom:8px;">Log</div>
+    <pre id="log"></pre>
+  </div>
 
-    <section class="log">
-      <h3>Log</h3>
-      <pre id="log"></pre>
-    </section>
-  </main>
+  <!-- 👉 Set your D-ID Agent here (easy to change per deployment) -->
+  <script>
+    // If you prefer, you can paste the full share URL and extract the id:
+    // const shareUrl = "https://studio.d-id.com/agents/share?id=v2_agt_E_3zw1Jf&...";
+    // window.EMMA_AGENT_ID = new URL(shareUrl).searchParams.get("id");
+    window.EMMA_AGENT_ID = "v2_agt_E_3zw1Jf";
+  </script>
 
   <script>
-    const userText = document.getElementById('userText');
-    const speakBtn = document.getElementById('speakBtn');
-    const micBtn = document.getElementById('micBtn');
-    const stopMicBtn = document.getElementById('stopMicBtn');
-    const statusEl = document.getElementById('status');
     const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const promptEl = document.getElementById('prompt');
+    const askBtn = document.getElementById('askBtn');
+    const micBtn = document.getElementById('micBtn');
+    const stopBtn = document.getElementById('stopBtn');
     const videoEl = document.getElementById('emmaVideo');
 
-    function log(line) {
-      logEl.textContent += line + "\\n";
-      logEl.scrollTop = logEl.scrollHeight;
-    }
-    function setStatus(s) { statusEl.textContent = s; }
+    function log(line){ logEl.textContent += (logEl.textContent ? "\n" : "") + line; logEl.scrollTop = logEl.scrollHeight; }
+    function setStatus(t){ statusEl.textContent = t; }
 
-    async function askEmma() {
-      const prompt = userText.value.trim();
-      if (!prompt) {
-        userText.focus();
+    // --- Browser speech-to-text (Web Speech API). Fallback is manual typing.
+    let recognizer = null;
+    micBtn.addEventListener('click', () => {
+      try{
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if(!SR){ alert("Speech recognition not supported in this browser."); return; }
+        recognizer?.abort?.();
+        recognizer = new SR();
+        recognizer.lang = "en-US";
+        recognizer.interimResults = true;
+        recognizer.onresult = (e)=>{
+          let final = "";
+          for(let i=0;i<e.results.length;i++){
+            final += e.results[i][0].transcript;
+          }
+          promptEl.value = final;
+        };
+        recognizer.onstart = ()=> setStatus("Listening…");
+        recognizer.onend = ()=> setStatus("Ready.");
+        recognizer.start();
+      }catch(err){
+        log("[mic] " + err.message);
+      }
+    });
+    stopBtn.addEventListener('click', ()=> recognizer?.abort?.());
+
+    // --- Ask flow: 1) OpenAI answer  2) D-ID talk (video)
+    askBtn.addEventListener('click', async ()=>{
+      const user = promptEl.value.trim();
+      if(!user){ return; }
+      setStatus("Thinking…");
+      log("You: " + user);
+
+      // 1) Ask OpenAI on the server (keeps key safe)
+      let replyText = "";
+      try{
+        const r = await fetch("/api/openai-chat", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ prompt: user })
+        });
+        const j = await r.json();
+        if(!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+        replyText = (j.text || "").trim();
+      }catch(err){
+        setStatus("Error");
+        log("[openai] " + err.message);
         return;
       }
+      log("Emma (text): " + replyText);
 
-      try {
-        setStatus('Thinking (OpenAI)…');
-        log('[user] ' + prompt);
-
-        // 1) OpenAI "brain": user -> reply text
-        const r1 = await fetch('/api/reply', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ prompt })
+      // 2) Ask D-ID to speak that reply using your Agent
+      try{
+        setStatus("Speaking…");
+        const r2 = await fetch("/api/did-talk", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            agentId: window.EMMA_AGENT_ID,
+            text: replyText
+          })
         });
-        if (!r1.ok) {
-          const t = await r1.text();
-          log('[error] reply http ' + r1.status + '\\n' + t);
-          setStatus('Error from OpenAI.');
-          return;
-        }
-        const { reply } = await r1.json();
-        log('[emma] ' + reply);
+        const j2 = await r2.json();
+        if(!r2.ok) throw new Error(j2.error || ("HTTP " + r2.status));
 
-        // 2) D-ID: reply text -> lip-synced video
-        setStatus('Rendering lipsync (D-ID)…');
-        const r2 = await fetch('/api/talk', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ text: reply })
-        });
-        if (!r2.ok) {
-          const t = await r2.text();
-          log('[error] talk http ' + r2.status + '\\n' + t);
-          setStatus('Error from D-ID.');
-          return;
-        }
-        const { videoUrl } = await r2.json();
-        log('[video] ' + videoUrl);
+        // We expect a playable URL back (streaming or mp4)
+        const url = j2.videoUrl || j2.streamUrl || j2.result_url || j2.url;
+        if(!url) throw new Error("No video url in response.");
 
-        // 3) Play it
-        videoEl.src = videoUrl;
-        await videoEl.play().catch(()=>{ /* autoplay may be blocked; user can press play */ });
-        setStatus('Done. Playing.');
-      } catch (err) {
-        log('[error] ' + (err?.message || err));
-        setStatus('Something went wrong.');
+        videoEl.src = url;
+        await videoEl.play();
+        setStatus("Ready.");
+      }catch(err){
+        setStatus("Error");
+        log("[d-id] " + err.message);
       }
-    }
-
-    // Basic browser speech-to-text (Web Speech API) to fill the textbox
-    let recognition;
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognition = new SR();
-      recognition.lang = 'en-US';
-      recognition.interimResults = true;
-      recognition.onresult = (ev) => {
-        let final = '';
-        for (const r of ev.results) {
-          final += r[0].transcript;
-        }
-        userText.value = final;
-      };
-      recognition.onstart = ()=> setStatus('Listening…');
-      recognition.onend   = ()=> { setStatus('Ready.'); stopMicBtn.disabled = true; micBtn.disabled = false; }
-      micBtn.onclick = () => { recognition.start(); micBtn.disabled = true; stopMicBtn.disabled = false; };
-      stopMicBtn.onclick = () => recognition.stop();
-    } else {
-      micBtn.disabled = true;
-      stopMicBtn.disabled = true;
-      micBtn.title = 'Speech-to-text not supported in this browser';
-    }
-
-    speakBtn.onclick = askEmma;
+    });
   </script>
 </body>
 </html>
