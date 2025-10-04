@@ -2,176 +2,100 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>EmotiKnow — Emma (D-ID + OpenAI)</title>
   <style>
-    :root {
-      --bg:#0b0f14; --panel:#121821; --muted:#9fb0c3; --text:#e7edf5; --brand:#4ea3ff;
-      --btn:#2a3a52; --btn2:#204a34;
-    }
-    * { box-sizing:border-box; }
-    body {
-      margin:0; padding:24px; background:var(--bg); color:var(--text);
-      font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
-    }
-    h1 { margin:0 0 16px 0; font-weight:800; letter-spacing:.2px; }
-    .grid {
-      display:grid; gap:22px;
-      grid-template-columns: minmax(280px, 560px) minmax(480px, 1fr);
-      align-items:start;
-    }
-    .card { background:var(--panel); border-radius:16px; padding:16px; }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    textarea {
-      width:100%; height:120px; resize:vertical; padding:12px 14px;
-      background:#0f141b; color:var(--text); border:1px solid #223142; border-radius:12px;
-      font-size:16px; line-height:1.4;
-    }
-    button {
-      appearance:none; border:0; border-radius:12px; padding:10px 14px; font-weight:700;
-      background:var(--btn); color:var(--text); cursor:pointer;
-    }
-    button.primary { background:var(--brand); color:#06101b; }
-    button.stop { background:#5b2030; }
-    .muted { color:var(--muted); font-size:13px; }
-    video, .video-frame {
-      width:100%; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden;
-      display:block;
-    }
-    #log {
-      background:#0a0f14; color:#bcd0e4; border-radius:12px; padding:12px; white-space:pre-wrap;
-      max-height:240px; overflow:auto; font-size:12px;
-    }
-    .pill { background:#17212c; color:var(--muted); padding:8px 10px; border-radius:999px; font-size:12px;}
+    :root{--bg:#0c0f12;--panel:#12161b;--text:#e7edf5;--muted:#9fb0c3;--brand:#4ea3ff}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Inter,Arial}
+    .wrap{display:flex;gap:22px;padding:22px}
+    .panel{width:440px;background:var(--panel);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+    h1{margin:0 0 6px;font-size:22px}
+    textarea{width:100%;height:120px;border:1px solid #223041;background:#0b1118;color:var(--text);border-radius:10px;padding:12px;resize:vertical}
+    button{appearance:none;border:0;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer;background:var(--brand);color:#081018}
+    button.secondary{background:#1b2430;color:var(--text)}
+    .row{display:flex;gap:10px;align-items:center}
+    .stage{flex:1;display:grid;place-items:center;background:#080a0d;border-radius:14px;overflow:hidden}
+    video{width:min(900px,95%);aspect-ratio:16/9;background:#000;border-radius:12px}
+    #log{white-space:pre-wrap;background:#0a0f14;border-radius:10px;padding:10px;font-size:12px;max-height:160px;overflow:auto;color:#cfe1f7}
   </style>
 </head>
 <body>
-  <h1>EmotiKnow — Emma (D-ID + OpenAI)</h1>
+  <div class="wrap">
+    <aside class="panel">
+      <h1>EmotiKnow — Emma (D-ID + OpenAI)</h1>
 
-  <div class="grid">
-    <!-- Left: user input -->
-    <div class="card">
-      <div class="muted" style="margin-bottom:8px;">Say or type something to Emma</div>
-      <textarea id="prompt" placeholder="Ask Emma anything…">hello</textarea>
-      <div class="row" style="margin-top:10px;">
-        <button id="askBtn" class="primary">Ask Emma</button>
-        <button id="micBtn">🎙️ Dictate</button>
-        <button id="stopBtn" class="stop">■ Stop</button>
-        <span id="status" class="pill">Ready.</span>
-      </div>
-    </div>
+      <label>Say or type something to Emma</label>
+      <textarea id="prompt" placeholder="hello!"></textarea>
 
-    <!-- Right: Emma video -->
-    <div class="card">
-      <video id="emmaVideo" class="video-frame" playsinline controls></video>
-      <div class="muted" style="margin-top:6px;">
-        If the video freezes, just click Ask again; a fresh talk will be generated.
+      <div class="row">
+        <button id="askBtn">Ask Emma</button>
+        <button id="stopBtn" class="secondary">Stop</button>
+        <span id="status" style="color:var(--muted);margin-left:auto">Ready.</span>
       </div>
-    </div>
+
+      <div id="log"></div>
+    </aside>
+
+    <main class="stage">
+      <video id="player" controls playsinline></video>
+    </main>
   </div>
 
-  <div class="card" style="margin-top:22px;">
-    <div class="muted" style="margin-bottom:8px;">Log</div>
-    <pre id="log"></pre>
-  </div>
-
-  <!-- 👉 Set your D-ID Agent here (easy to change per deployment) -->
   <script>
-    // If you prefer, you can paste the full share URL and extract the id:
-    // const shareUrl = "https://studio.d-id.com/agents/share?id=v2_agt_E_3zw1Jf&...";
-    // window.EMMA_AGENT_ID = new URL(shareUrl).searchParams.get("id");
-    window.EMMA_AGENT_ID = "v2_agt_E_3zw1Jf";
-  </script>
+    // 👇👇 PUT YOUR D-ID AGENT ID RIGHT HERE
+    const DID_AGENT_ID = "v2_agt_E_3zw1Jf";
+    // (You can later move that into an env var on the server if you prefer.)
 
-  <script>
-    const logEl = document.getElementById('log');
-    const statusEl = document.getElementById('status');
-    const promptEl = document.getElementById('prompt');
-    const askBtn = document.getElementById('askBtn');
-    const micBtn = document.getElementById('micBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const videoEl = document.getElementById('emmaVideo');
+    const el = {
+      prompt: document.getElementById('prompt'),
+      ask: document.getElementById('askBtn'),
+      stop: document.getElementById('stopBtn'),
+      status: document.getElementById('status'),
+      log: document.getElementById('log'),
+      player: document.getElementById('player'),
+    };
 
-    function log(line){ logEl.textContent += (logEl.textContent ? "\n" : "") + line; logEl.scrollTop = logEl.scrollHeight; }
-    function setStatus(t){ statusEl.textContent = t; }
+    function log(line){ el.log.textContent += (el.log.textContent ? "\n" : "") + line; el.log.scrollTop = el.log.scrollHeight; }
+    function setStatus(s){ el.status.textContent = s; }
 
-    // --- Browser speech-to-text (Web Speech API). Fallback is manual typing.
-    let recognizer = null;
-    micBtn.addEventListener('click', () => {
+    el.ask.onclick = async () => {
+      const userText = el.prompt.value.trim();
+      if(!userText){ el.prompt.focus(); return; }
+      setStatus('Thinking…'); log("You: " + userText);
+
       try{
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if(!SR){ alert("Speech recognition not supported in this browser."); return; }
-        recognizer?.abort?.();
-        recognizer = new SR();
-        recognizer.lang = "en-US";
-        recognizer.interimResults = true;
-        recognizer.onresult = (e)=>{
-          let final = "";
-          for(let i=0;i<e.results.length;i++){
-            final += e.results[i][0].transcript;
-          }
-          promptEl.value = final;
-        };
-        recognizer.onstart = ()=> setStatus("Listening…");
-        recognizer.onend = ()=> setStatus("Ready.");
-        recognizer.start();
-      }catch(err){
-        log("[mic] " + err.message);
-      }
-    });
-    stopBtn.addEventListener('click', ()=> recognizer?.abort?.());
-
-    // --- Ask flow: 1) OpenAI answer  2) D-ID talk (video)
-    askBtn.addEventListener('click', async ()=>{
-      const user = promptEl.value.trim();
-      if(!user){ return; }
-      setStatus("Thinking…");
-      log("You: " + user);
-
-      // 1) Ask OpenAI on the server (keeps key safe)
-      let replyText = "";
-      try{
-        const r = await fetch("/api/openai-chat", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ prompt: user })
+        // 1) Ask OpenAI (your Vercel function below)
+        const a = await fetch('/api/ask', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ prompt: userText })
         });
-        const j = await r.json();
-        if(!r.ok) throw new Error(j.error || ("HTTP " + r.status));
-        replyText = (j.text || "").trim();
-      }catch(err){
-        setStatus("Error");
-        log("[openai] " + err.message);
-        return;
-      }
-      log("Emma (text): " + replyText);
+        if(!a.ok){ const t = await a.text(); throw new Error("OpenAI error: " + t); }
+        const { reply } = await a.json();
+        log("Emma (text): " + reply);
+        setStatus('Animating…');
 
-      // 2) Ask D-ID to speak that reply using your Agent
-      try{
-        setStatus("Speaking…");
-        const r2 = await fetch("/api/did-talk", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            agentId: window.EMMA_AGENT_ID,
-            text: replyText
-          })
+        // 2) Tell D-ID agent to speak the OpenAI reply (server function below)
+        const b = await fetch('/api/did-talk', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ agentId: DID_AGENT_ID, text: reply })
         });
-        const j2 = await r2.json();
-        if(!r2.ok) throw new Error(j2.error || ("HTTP " + r2.status));
+        if(!b.ok){ const t = await b.text(); throw new Error("D-ID error: " + t); }
+        const { result_url } = await b.json();
+        if(!result_url) throw new Error("No result_url from D-ID.");
 
-        // We expect a playable URL back (streaming or mp4)
-        const url = j2.videoUrl || j2.streamUrl || j2.result_url || j2.url;
-        if(!url) throw new Error("No video url in response.");
-
-        videoEl.src = url;
-        await videoEl.play();
-        setStatus("Ready.");
+        // 3) Play the returned video
+        el.player.src = result_url;
+        el.player.currentTime = 0;
+        await el.player.play();
+        setStatus('Playing');
       }catch(err){
-        setStatus("Error");
-        log("[d-id] " + err.message);
+        console.error(err); log("ERROR: " + (err.message||err)); setStatus('Error');
       }
-    });
+    };
+
+    el.stop.onclick = () => { try{ el.player.pause(); setStatus('Paused'); }catch{} };
   </script>
 </body>
 </html>
