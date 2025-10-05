@@ -1,53 +1,65 @@
-// /api/openai-talk.js
-// Simple “brain” endpoint: takes { prompt } and returns { reply } using OpenAI.
-
+// /api/did-talk.js
 export default async function handler(req, res) {
   try {
-    if (req.method !== 'POST') return res.status(405).send('Method not allowed');
-
-    const { prompt } = req.body || {};
-    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
-
-    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    if (!OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'Missing OPENAI_API_KEY' });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed (use POST)' });
     }
 
-    // Minimal responses API call (chat-style)
-    const r = await fetch('https://api.openai.com/v1/responses', {
+    const DID_KEY = process.env.DID_API_KEY;
+    if (!DID_KEY) {
+      return res.status(500).json({ error: 'Missing DID_API_KEY' });
+    }
+
+    let body;
+    try {
+      body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    } catch (e) {
+      return res.status(400).json({ error: 'Body must be JSON' });
+    }
+
+    const { agentId, text } = body || {};
+    if (!agentId || !text) {
+      return res.status(400).json({ error: 'Missing agentId or text' });
+    }
+
+    const url = `https://api.d-id.com/agents/${encodeURIComponent(agentId)}/talks`;
+
+    const r = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${DID_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        input: [
-          {
-            role: 'system',
-            content:
-              "You are Emma, a warm, kind voice companion. Keep answers friendly, concise, and easy to speak aloud."
-          },
-          { role: 'user', content: prompt }
-        ]
+        input: text
+        // You can add voice/style options here if you want
       })
     });
 
-    const data = await r.json();
-    if (!r.ok) return res.status(r.status).json(data);
+    const contentType = r.headers.get('content-type') || '';
+    const isJSON = contentType.includes('application/json');
 
-    // `responses` returns the text in a couple of possible shapes; normalize:
-    let reply = '';
-    if (Array.isArray(data.output_text)) reply = data.output_text.join('\n');
-    else if (typeof data.output_text === 'string') reply = data.output_text;
-    else if (Array.isArray(data.output)) {
-      reply = data.output.map(p => p.content?.map(c => c.text)?.join(' ') || '').join('\n');
+    if (!r.ok) {
+      const errPayload = isJSON ? await r.json() : { errorText: await r.text() };
+      return res.status(r.status).json({
+        error: 'D-ID request failed',
+        status: r.status,
+        details: errPayload
+      });
     }
-    reply ||= 'Hi there!';
 
-    return res.status(200).json({ reply });
+    const data = isJSON ? await r.json() : {};
+    // D-ID returns a talk object; normalize a couple fields we’ll use on the client.
+    return res.status(200).json({
+      ok: true,
+      talk: data,
+      // some responses include a direct result url; others include an asset
+      videoUrl:
+        data?.result_url ||
+        data?.result?.url ||
+        data?.assets?.video || null
+    });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'openai-talk failed', details: err.message });
+    return res.status(500).json({ error: 'Server error', message: String(err?.message || err) });
   }
 }
