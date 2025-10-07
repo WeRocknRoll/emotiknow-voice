@@ -1,189 +1,164 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>EmotiKnow — Emma (D-ID + OpenAI)</title>
+  <title>EmotiKnow — Mouth Sync Preview</title>
+  <link rel="stylesheet" href="/style.css" />
   <style>
-    :root{
-      --bg:#0d1116; --panel:#131a22; --ink:#e8eef6; --muted:#9fb0c3;
-      --brand:#6aa7ff; --accent:#7bd9b5; --danger:#ff7a7a; --line:#213042;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0; background:var(--bg); color:var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter, Arial;
-    }
-    .wrap{
-      max-width:1280px; margin:28px auto; padding:0 16px; display:grid; gap:22px;
-    }
-    h1{margin:0 0 6px 0; font-size:clamp(22px,2.8vw,36px); letter-spacing:.2px}
-    .grid{display:grid; grid-template-columns: 1.1fr 1.1fr; gap:22px}
-    @media (max-width:1000px){ .grid{grid-template-columns:1fr;}}
-    .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    textarea{
-      width:100%; min-height:120px; resize:vertical; border-radius:10px; padding:12px;
-      background:#0b1016; border:1px solid var(--line); color:var(--ink); font-size:16px;
-    }
-    button{
-      appearance:none; border:0; border-radius:10px; padding:10px 16px; font-weight:600; cursor:pointer;
-      background:var(--brand); color:#091018;
-    }
-    button.secondary{ background:#1b2531; color:var(--ink); }
-    button.danger{ background:var(--danger); color:#091018; }
-    button:disabled{opacity:.6; cursor:not-allowed}
-    .hint{font-size:13px; color:var(--muted)}
-    .log{font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space:pre-wrap;
-      background:#0a0f14; border:1px solid var(--line); border-radius:10px; padding:12px; min-height:64px}
-    video{
-      width:100%; aspect-ratio:16/9; background:#000; border-radius:12px; border:1px solid var(--line);
-    }
-    .badge{display:inline-block; padding:4px 8px; border-radius:999px; background:#0e1620; border:1px solid var(--line); color:var(--muted); font-size:12px}
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
+    .wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 16px; }
+    .panel { border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; }
+    .stage { position: relative; width: 640px; height: 360px; margin: 0 auto; }
+    .stage img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+    .mouth { position: absolute; pointer-events: none; transform-origin: center; }
+    button { background: #111; color: #fff; border: 0; padding: 10px 16px; border-radius: 14px; }
+    input[type="range"] { width: 100%; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { font-size: 12px; opacity: .8; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>EmotiKnow — Emma (D-ID + OpenAI)</h1>
+    <h1>EmotiKnow — Mouth Sync Preview</h1>
 
-    <div class="grid">
-      <!-- Left: input + controls -->
-      <div class="card">
-        <div class="hint">Say or type something to Emma</div>
-        <textarea id="userInput" placeholder="Ask me anything…"></textarea>
-        <div class="row" style="margin-top:10px">
-          <button id="askBtn">Ask Emma</button>
-          <button id="dictateBtn" class="secondary">🎙️ Dictate</button>
-          <button id="stopBtn" class="danger">■ Stop</button>
-          <span id="state" class="hint">Ready.</span>
-        </div>
-        <div style="margin-top:10px" class="hint">
-          Agent: <span class="badge" id="agentBadge">v2_agt_E_3zw1Jf</span>
-          &nbsp;•&nbsp; If the video freezes, just click <b>Ask</b> again to generate a fresh reply.
-        </div>
-      </div>
-
-      <!-- Right: video -->
-      <div class="card">
-        <video id="emmaVideo" controls playsinline></video>
+    <div class="panel">
+      <textarea id="text" rows="3" style="width:100%; border-radius:12px; padding:12px;">
+Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?
+      </textarea>
+      <div style="display:flex; gap:12px; align-items:center; margin-top:10px;">
+        <button id="speak">Speak</button>
+        <span style="font-size:12px; opacity:.7;">Viseme: <b id="viseme">X</b></span>
       </div>
     </div>
 
-    <!-- Log -->
-    <div class="card">
-      <div class="hint" style="margin-bottom:8px">Log</div>
-      <div id="log" class="log"></div>
+    <div class="panel">
+      <div class="grid2">
+        <div>
+          <label>Image URL</label>
+          <input id="imgUrl" value="/emma.jpg" style="width:100%; padding:8px; border-radius:10px; border:1px solid #e5e7eb;" />
+        </div>
+        <div></div>
+
+        <div>
+          <label>Mouth X: <span id="lx">165</span>px</label>
+          <input type="range" id="mx" min="0" max="500" value="165">
+        </div>
+        <div>
+          <label>Mouth Y: <span id="ly">270</span>px</label>
+          <input type="range" id="my" min="0" max="500" value="270">
+        </div>
+        <div>
+          <label>Scale: <span id="ls">1.00</span></label>
+          <input type="range" id="ms" min="0.5" max="2" step="0.01" value="1.00">
+        </div>
+        <div>
+          <label>Rotate: <span id="lr">0</span>°</label>
+          <input type="range" id="mr" min="-20" max="20" value="0">
+        </div>
+      </div>
+
+      <div class="stage">
+        <img id="bg" src="/emma.jpg" alt="Emma">
+        <!-- SVG mouth overlay -->
+        <div class="mouth" id="mouth" style="left:165px; top:270px; transform: scale(1) rotate(0deg);">
+          <svg width="140" height="100" viewBox="50 85 100 70">
+            <path id="mouthPath" d="M60 112 Q100 115 140 112 Q100 118 60 112 Z" fill="#8b1a1a" stroke="#5f0f0f" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
-    // ---------- CONFIG ----------
-    // Your D-ID Agent ID (can also pass ?agent=... in the URL to override)
-    const DEFAULT_AGENT_ID = 'v2_agt_E_3zw1Jf';
-    const urlAgent = new URLSearchParams(location.search).get('agent') || DEFAULT_AGENT_ID;
-
-    const els = {
-      input: document.getElementById('userInput'),
-      ask: document.getElementById('askBtn'),
-      dictate: document.getElementById('dictateBtn'),
-      stop: document.getElementById('stopBtn'),
-      video: document.getElementById('emmaVideo'),
-      log: document.getElementById('log'),
-      state: document.getElementById('state'),
-      agentBadge: document.getElementById('agentBadge')
-    };
-    els.agentBadge.textContent = urlAgent;
-
-    function log(line){
-      els.log.textContent += (els.log.textContent ? '\n' : '') + line;
-      els.log.scrollTop = els.log.scrollHeight;
-    }
-    function setState(text){ els.state.textContent = text; }
-
-    // ---- Dictation (Web Speech API: Chrome / Edge) ----
-    let recog = null;
-    if ('webkitSpeechRecognition' in window){
-      const SR = window.webkitSpeechRecognition;
-      recog = new SR();
-      recog.continuous = false;
-      recog.interimResults = false;
-      recog.lang = 'en-US';
-      recog.onresult = (e)=>{
-        const t = e.results?.[0]?.[0]?.transcript || '';
-        if (t) {
-          els.input.value = t;
-          log('🎙️ ' + t);
-        }
-      };
-      recog.onerror = err => log('[mic] ' + err.error);
-      recog.onend = ()=> setState('Ready.');
-    } else {
-      els.dictate.disabled = true;
-      els.dictate.title = 'Speech recognition not supported in this browser';
-    }
-
-    els.dictate.addEventListener('click', ()=>{
-      if (!recog) return;
-      setState('Listening…');
-      recog.start();
-    });
-
-    els.stop.addEventListener('click', ()=>{
-      els.video.pause();
-      els.video.currentTime = 0;
-      setState('Stopped.');
-    });
-
-    els.ask.addEventListener('click', askEmma);
-
-    async function askEmma(){
-      try{
-        const raw = (els.input.value || '').trim();
-        if (!raw) { els.input.focus(); return; }
-        setState('Thinking…');
-
-        // 1) Ask OpenAI for Emma’s textual reply
-        const r1 = await fetch('/api/openai-talk', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ prompt: raw })
-        });
-        const j1 = await r1.json();
-        if (!r1.ok) throw new Error(j1?.error || 'openai-talk failed');
-
-        const reply = (j1.reply || '').trim() || 'Hi!';
-        log(`You: ${raw}`);
-        log(`Emma (text): ${reply}`);
-
-        setState('Generating video…');
-
-        // 2) Ask D-ID to generate a talking video from the reply
-        const r2 = await fetch('/api/did-talk', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ agentId: urlAgent, text: reply })
-        });
-        const j2 = await r2.json();
-        if (!r2.ok) throw new Error(j2?.error || 'did-talk failed');
-
-        const videoUrl = j2.url || j2?.raw?.result_url || j2?.raw?.output_url || j2?.raw?.stream_url;
-        if (!videoUrl){
-          log('[d-id] No video URL in response'); setState('Ready.'); return;
-        }
-
-        // 3) Play the video
-        els.video.src = videoUrl;
-        await els.video.play().catch(()=>{ /* user gesture may be required */ });
-        setState('Playing.');
-      }catch(err){
-        console.error(err);
-        log(`[error] ${err.message || err}`);
-        setState('Error');
+    const pathFor = (v) => {
+      switch (v) {
+        case "M": return "M60 110 Q100 120 140 110 Q100 118 60 110 Z";
+        case "F": return "M60 108 Q100 112 140 108 Q100 120 60 108 Z";
+        case "L": return "M60 113 Q100 130 140 113 Q100 132 60 113 Z";
+        case "S": return "M60 112 Q100 118 140 112 Q100 120 60 112 Z";
+        case "A": return "M60 95 Q100 145 140 95 Q100 165 60 95 Z";
+        case "E": return "M60 105 Q100 120 140 105 Q100 130 60 105 Z";
+        case "I": return "M85 102 Q100 135 115 102 Q100 150 85 102 Z";
+        case "O": return "M80 100 Q100 145 120 100 Q100 155 80 100 Z";
+        case "U": return "M82 96 Q100 148 118 96 Q100 160 82 96 Z";
+        default:  return "M60 112 Q100 115 140 112 Q100 118 60 112 Z";
       }
+    };
+
+    const mouth = document.getElementById("mouth");
+    const mouthPath = document.getElementById("mouthPath");
+    const speakBtn = document.getElementById("speak");
+    const txt = document.getElementById("text");
+    const visemeEl = document.getElementById("viseme");
+
+    // sliders
+    const mx = document.getElementById("mx");
+    const my = document.getElementById("my");
+    const ms = document.getElementById("ms");
+    const mr = document.getElementById("mr");
+    const lx = document.getElementById("lx");
+    const ly = document.getElementById("ly");
+    const ls = document.getElementById("ls");
+    const lr = document.getElementById("lr");
+    const imgUrl = document.getElementById("imgUrl");
+    const bg = document.getElementById("bg");
+
+    function updateOverlay() {
+      mouth.style.left = mx.value + "px";
+      mouth.style.top = my.value + "px";
+      mouth.style.transform = `scale(${ms.value}) rotate(${mr.value}deg)`;
+      lx.textContent = mx.value; ly.textContent = my.value; ls.textContent = (+ms.value).toFixed(2); lr.textContent = mr.value;
+    }
+    mx.oninput = my.oninput = ms.oninput = mr.oninput = updateOverlay;
+    imgUrl.onchange = () => { bg.src = imgUrl.value; };
+
+    function fakeTimeline(text) {
+      const clean = text.trim().replace(/\s+/g, " ");
+      const groups = Math.max(8, Math.min(60, Math.ceil(clean.length / 4)));
+      const seq = ["M","A","E","I","O","U","S","L","F","X"];
+      return Array.from({length: groups}, (_, i) => ({ t: i * 110, v: seq[i % seq.length] }));
     }
 
-    // Nice default
-    els.input.value = 'Give me a one-sentence, kind, upbeat greeting to start our day.';
+    let raf = null, start = 0, playing = false;
+
+    function animate(marks) {
+      start = performance.now();
+      const step = () => {
+        const elapsed = performance.now() - start;
+        let v = "X";
+        for (let i = 0; i < marks.length; i++) { if (elapsed >= marks[i].t) v = marks[i].v; else break; }
+        mouthPath.setAttribute("d", pathFor(v));
+        visemeEl.textContent = v;
+        if (playing) raf = requestAnimationFrame(step);
+      };
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(step);
+    }
+
+    speakBtn.onclick = async () => {
+      playing = true;
+      const marks = fakeTimeline(txt.value);
+      animate(marks);
+
+      const synth = window.speechSynthesis;
+      if (synth) {
+        try { synth.cancel(); } catch(e) {}
+        const u = new SpeechSynthesisUtterance(txt.value);
+        u.rate = 1.0;
+        synth.speak(u);
+        await new Promise(res => { u.onend = res; u.onerror = res; });
+      } else {
+        const est = Math.max(1500, Math.min(8000, txt.value.length * 50));
+        await new Promise(res => setTimeout(res, est));
+      }
+
+      playing = false;
+      mouthPath.setAttribute("d", pathFor("X"));
+      visemeEl.textContent = "X";
+    };
+
+    updateOverlay();
   </script>
 </body>
 </html>
