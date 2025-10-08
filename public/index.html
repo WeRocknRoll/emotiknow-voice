@@ -1,148 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Emma — Minimal Mouth Test</title>
-<style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0b0f14; color:#eaf0f7; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
-  .wrap { max-width:900px; margin:24px auto; padding:0 16px; }
-  textarea, input[type="text"] { width:100%; background:#0a0f14; color:#eaf0f7; border:1px solid #1b2632; border-radius:10px; padding:10px; }
-  button { background:#0f62fe; color:#fff; border:0; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:.6 }
-  .row { display:flex; gap:12px; align-items:center; margin:12px 0; flex-wrap:wrap; }
-  .label { min-width:120px; }
-  input[type="range"] { width:260px; }
-  .stage { position:relative; width:640px; height:360px; border-radius:14px; overflow:hidden; background:#000; margin-top:12px; }
-  .stage img#bg { width:100%; height:100%; object-fit:cover; display:block; }
-  /* mouth sprite */
-  #mouth {
-    position:absolute; left:260px; top:98px;
-    width:300px; height:160px; pointer-events:none;
-    transform-origin:center center;
-    /* default scale/rotate so sliders visibly affect this element */
-    transform:scale(0.50) rotate(-1deg);
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>EmotiKnow Emma</title>
+  <style>
+    body { background:#111; color:white; font-family:sans-serif; }
+    #container { position:relative; display:inline-block; }
+    #avatar { display:block; max-width:400px; }
+    #mouth {
+      position:absolute;
+      top:0;
+      left:0;
+      transform-origin:center center;
+      pointer-events:none;
+    }
+    .controls { margin-top:20px; }
+    textarea { width:300px; height:80px; }
+  </style>
 </head>
 <body>
-<div class="wrap">
-  <h2>Emma — Minimal Mouth Test</h2>
+  <h1>EmotiKnow Emma</h1>
 
-  <div class="row">
-    <div class="label">Script</div>
-    <textarea id="text" rows="3">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?</textarea>
-  </div>
-  <div class="row">
-    <button id="speak">Speak</button>
-    <div>Viseme: <b id="viseme">X</b></div>
+  <div id="container">
+    <img id="avatar" src="emma.jpg" />
+    <img id="mouth" src="/mouth/X.png" />
   </div>
 
-  <div class="row">
-    <div class="label">Image URL</div>
-    <input id="imgUrl" type="text" value="/emma.jpg" />
+  <div class="controls">
+    <p>Script</p>
+    <textarea id="text">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?</textarea><br>
+    <button id="speak">Speak</button> Viseme: <span id="viseme">X</span>
+    <br><br>
+    Mouth X: <input type="range" id="mouthX" min="0" max="400" value="165"><br>
+    Mouth Y: <input type="range" id="mouthY" min="0" max="400" value="100"><br>
+    Scale: <input type="range" id="mouthScale" min="0.2" max="2" step="0.01" value="0.5"><br>
+    Rotate: <input type="range" id="mouthRotate" min="-30" max="30" step="1" value="0"><br>
   </div>
-  <div class="row">
-    <div class="label">Mouth X (<span id="lx">260</span>px)</div>
-    <input id="mx" type="range" min="0" max="600" value="260" />
-  </div>
-  <div class="row">
-    <div class="label">Mouth Y (<span id="ly">98</span>px)</div>
-    <input id="my" type="range" min="0" max="300" value="98" />
-  </div>
-  <div class="row">
-    <div class="label">Scale (<span id="ls">0.50</span>)</div>
-    <input id="ms" type="range" min="0.2" max="2" step="0.01" value="0.50" />
-  </div>
-  <div class="row">
-    <div class="label">Rotate (<span id="lr">-1</span>°)</div>
-    <input id="mr" type="range" min="-30" max="30" step="1" value="-1" />
-  </div>
-
-  <div class="stage">
-    <img id="bg" src="/emma.jpg" alt="Emma" />
-    <!-- single-layer mouth for simplest baseline -->
-    <img id="mouth" src="/mouth/X.png" alt="mouth" />
-  </div>
-
-  <p style="opacity:.8;font-size:13px;margin-top:10px">
-    Expected files: <code>/public/emma.jpg</code> and <code>/public/mouth/A.png E.png F.png I.png L.png M.png O.png S.png U.png X.png</code>
-  </p>
-</div>
 
 <script>
-  // ==== DOM ====
-  const txt = document.getElementById('text');
-  const speakBtn = document.getElementById('speak');
-  const visemeEl = document.getElementById('viseme');
+const VISEMES = ["X","A","E","I","O","U","M","F","L","S"];
+const MOUTH_BASE = "/mouth/";
 
-  const imgUrl = document.getElementById('imgUrl');
-  const bg = document.getElementById('bg');
+const mouthImg = document.getElementById("mouth");
+const visemeEl = document.getElementById("viseme");
 
-  const mouth = document.getElementById('mouth');
-  const mx = document.getElementById('mx'); const lx = document.getElementById('lx');
-  const my = document.getElementById('my'); const ly = document.getElementById('ly');
-  const ms = document.getElementById('ms'); const ls = document.getElementById('ls');
-  const mr = document.getElementById('mr'); const lr = document.getElementById('lr');
+const sliders = {
+  x: document.getElementById("mouthX"),
+  y: document.getElementById("mouthY"),
+  scale: document.getElementById("mouthScale"),
+  rot: document.getElementById("mouthRotate")
+};
 
-  // ==== Sliders wire-up ====
-  function update() {
-    mouth.style.left = mx.value + 'px';
-    mouth.style.top  = my.value + 'px';
-    mouth.style.transform = `scale(${ms.value}) rotate(${mr.value}deg)`;
-    lx.textContent = mx.value; ly.textContent = my.value;
-    ls.textContent = (+ms.value).toFixed(2); lr.textContent = mr.value;
-  }
-  [mx, my, ms, mr].forEach(el => el.addEventListener('input', update));
-  imgUrl.addEventListener('change', () => { bg.src = imgUrl.value; });
-  update();
+function updateTransform() {
+  const x = sliders.x.value;
+  const y = sliders.y.value;
+  const s = sliders.scale.value;
+  const r = sliders.rot.value;
+  mouthImg.style.left = x+"px";
+  mouthImg.style.top = y+"px";
+  mouthImg.style.transform = `scale(${s}) rotate(${r}deg)`;
+}
 
-  // ==== Visemes + simple timeline ====
-  const ORDER = ["M","A","E","I","O","U","S","L","F","X"];
-  function setViseme(v) { visemeEl.textContent = v; mouth.src = `/mouth/${v}.png`; }
-  function makeTimeline(text) {
-    const groups = Math.max(8, Math.ceil(text.trim().length / 4));
-    return Array.from({length: groups}, (_, i) => ({ t: i*120, v: ORDER[i % ORDER.length] }));
-  }
+// attach slider updates
+Object.values(sliders).forEach(sl => sl.addEventListener("input", updateTransform));
+updateTransform();
 
-  // ==== Speech (browser SpeechSynthesis) ====
-  function speak(text) {
-    return new Promise((resolve) => {
-      const synth = window.speechSynthesis;
-      if (!synth) {
-        // no TTS available — just run animation roughly for duration
-        const est = Math.max(1500, Math.min(8000, text.length * 50));
-        setTimeout(resolve, est);
-        return;
-      }
-      try { synth.cancel(); } catch(e){}
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.0; u.pitch = 1.0; u.onend = resolve; u.onerror = resolve;
-      synth.speak(u);
-    });
-  }
+function setViseme(v) {
+  if (!VISEMES.includes(v)) v = "X";
+  mouthImg.src = `${MOUTH_BASE}${v}.png`;
+  visemeEl.textContent = v;
+}
 
-  // ==== Play ====
-  speakBtn.addEventListener('click', async () => {
-    const marks = makeTimeline(txt.value);
-    let i = 0, playing = true;
+// Fake timeline generator
+function fakeTimeline(text) {
+  const seq = ["M","A","E","I","O","U","S","L","F","X"];
+  const groups = Math.max(8, Math.min(60, text.length / 2));
+  return Array.from({length: groups}, (_,i)=>({t:i*120, v:seq[i%seq.length]}));
+}
 
-    // animation loop using setInterval to keep it simple
-    setViseme('X');
-    const timer = setInterval(() => {
-      if (!playing) return;
-      const m = marks[i++];
-      if (!m) { clearInterval(timer); playing = false; setViseme('X'); return; }
-      setViseme(m.v);
-    }, 120);
+// Animate
+function animate(marks, start) {
+  const step = () => {
+    const elapsed = performance.now() - start;
+    let v="X";
+    for (let i=0;i<marks.length;i++) {
+      if (elapsed >= marks[i].t) v=marks[i].v; else break;
+    }
+    setViseme(v);
+    if (elapsed < marks[marks.length-1].t) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 
-    await speak(txt.value); // runs in parallel
-    playing = false;
-  });
-
-  // ==== Quick asset sanity check in console (optional) ====
-  console.log('Try opening an asset directly:', location.origin + '/mouth/A.png');
+document.getElementById("speak").onclick = async () => {
+  const txt = document.getElementById("text").value.trim();
+  const marks = fakeTimeline(txt);
+  const u = new SpeechSynthesisUtterance(txt);
+  u.rate=1;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
+  animate(marks, performance.now());
+};
 </script>
 </body>
 </html>
