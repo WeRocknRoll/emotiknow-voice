@@ -4,26 +4,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EmotiKnow — Mouth Sync Preview</title>
-
   <style>
     :root { color-scheme: dark; }
-    body { margin:0; background:#0b0f14; color:#eef1f5; font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 28px; }
-    h1 { font-size: 36px; margin: 0 0 18px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-    .panel { border: 1px solid #1b2632; border-radius: 18px; padding: 16px; background: #0f141b; box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }
-    textarea { width: 100%; background:#0a0f14; color:#dfe6ee; border:1px solid #1b2632; border-radius:16px; padding:14px; resize: vertical; }
+    body { margin:0; background:#0b0f14; color:#eef1f5; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+    .wrap { max-width:1200px; margin:0 auto; padding:28px; }
+    h1 { font-size:36px; margin:0 0 18px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    .panel { border:1px solid #1b2632; border-radius:18px; padding:16px; background:#0f141b; }
+    textarea { width:100%; background:#0a0f14; color:#dfe6ee; border:1px solid #1b2632; border-radius:16px; padding:14px; resize:vertical; }
     button { background:#0f62fe; color:#fff; border:0; padding:10px 18px; border-radius:14px; font-weight:600; cursor:pointer; }
-    button:disabled { opacity:.6; cursor: default; }
+    button:disabled { opacity:.6; cursor:default; }
     .row { display:flex; align-items:center; gap:12px; margin-top:12px; }
     label { font-size:12px; opacity:.8; }
-    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:center; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:center; }
     input[type="range"] { width:100%; }
     input[type="text"] { width:100%; padding:10px; border-radius:12px; border:1px solid #1b2632; background:#0a0f14; color:#eaf0f7; }
-    .stage { position: relative; width: 640px; height: 360px; margin: 8px auto 0; border-radius: 18px; overflow: hidden; background:#000; }
-    .stage img.bg { width:100%; height:100%; object-fit: cover; display:block; }
-    .mouth { position: absolute; pointer-events: none; transform-origin: center; }
-    #mouthImg { width:300px; height:160px; image-rendering: auto; mix-blend-mode: multiply; filter: contrast(1.05) saturate(.95); }
+    .stage { position:relative; width:640px; height:360px; margin:8px auto 0; border-radius:18px; overflow:hidden; background:#000; }
+    .stage img.bg { width:100%; height:100%; object-fit:cover; display:block; }
+    .mouth { position:absolute; pointer-events:none; transform-origin:center; }
+    #mouthImg { width:300px; height:160px; image-rendering:auto; mix-blend-mode:multiply; filter:contrast(1.05) saturate(.95); }
     .hint { font-size:12px; opacity:.7; }
   </style>
 </head>
@@ -50,7 +49,7 @@
         <div class="grid2" style="margin-bottom:10px;">
           <label>Image URL</label>
           <input id="imgUrl" type="text" value="/emma.jpg" />
-          <label>Mouth X: <span id="lx">165</span>px</label>
+          <label>Mouth X: <span id="lx">260</span>px</label>
           <input type="range" id="mx" min="0" max="600" value="260" />
           <label>Mouth Y: <span id="ly">98</span>px</label>
           <input type="range" id="my" min="0" max="300" value="98" />
@@ -62,7 +61,7 @@
 
         <div class="stage">
           <img id="bg" class="bg" src="/emma.jpg" alt="Emma" />
-          <div class="mouth" id="mouth" style="left:260px; top:98px; transform: scale(0.50) rotate(-1deg);">
+          <div class="mouth" id="mouth" style="left:260px; top:98px; transform:scale(0.50) rotate(-1deg);">
             <img id="mouthImg" src="/mouth/X.png" alt="mouth sprite" />
           </div>
         </div>
@@ -70,28 +69,24 @@
     </div>
   </div>
 
-  <!-- JS goes at the end so DOM is ready -->
+  <!-- ===== JS (keep all inside this single script) ===== -->
   <script>
-// --- sprite config + fallback (using only the PNGs you have now) ---
-const MOUTH_BASE = "/mouth/";
+    // ---------- Sprite config + fallback ----------
+    const MOUTH_BASE = "/mouth/";
 
-// You currently have these files in /public/mouth/
-// (Make a copy of M.png as X.png if you haven't yet.)
-const HAVE = { O:true, U:true, I:true, M:true, X:true };
+    // Files you currently have. Make sure X.png exists (copy M.png -> X.png if needed).
+    const HAVE = { O:true, U:true, I:true, M:true, X:true };
 
-// If a viseme PNG is missing, reuse the closest one:
-const FALLBACK = {
-  A: "O",   // wide open → round
-  E: "I",   // smile-narrow → vertical narrow
-  F: "I",   // teeth on lip → vertical narrow
-  L: "A",   // tongue → wide/round works for now
-  S: "I"    // narrow teeth → vertical narrow
-};
+    // Map missing visemes to closest available one.
+    const FALLBACK = {
+      A: "O",   // wide → round
+      E: "I",   // smile-narrow → vertical narrow
+      F: "I",   // teeth on lip → vertical narrow
+      L: "A",   // tongue → wide/round works for now
+      S: "I"    // narrow teeth → vertical narrow
+    };
 
-// Helper
-function spriteExists(v){ return !!HAVE[v]; }
-
-    // ===== DOM refs =====
+    // ---------- DOM refs ----------
     const txt = document.getElementById("text");
     const speakBtn = document.getElementById("speak");
     const visemeEl = document.getElementById("viseme");
@@ -120,31 +115,21 @@ function spriteExists(v){ return !!HAVE[v]; }
     imgUrl.onchange = () => { bg.src = imgUrl.value; };
     updateOverlay();
 
-    <!-- ===== Viseme update ===== -->
-<script>
-function setViseme(v) {
-  // Pick the correct viseme, fallback if missing
-  const pick = SPRITE_EXISTS[v] 
-    ? v 
-    : (SPRITE_EXISTS[FALLBACK[v]] ? FALLBACK[v] : "X");
+    // ---------- Viseme update ----------
+    function setViseme(v) {
+      const pick = HAVE[v] ? v : (FALLBACK[v] || "X");
+      mouthImg.src = `${MOUTH_BASE}${pick}.png`;
+      visemeEl.textContent = v; // show requested viseme
+    }
 
-  // Load the corresponding mouth PNG
-  mouthImg.src = `${MOUTH_BASE}${pick}.png`;
-
-  // Debug: show current viseme letter in text
-  visemeEl.textContent = v;
-}
-</script>
-
-
-    // ===== Timeline & animation =====
+    // ---------- Timeline & animation ----------
     let playing = false, raf = null, t0 = 0;
 
     function fakeTimeline(text) {
       const clean = text.trim().replace(/\s+/g, " ");
       const groups = Math.max(8, Math.min(60, Math.ceil(clean.length / 4)));
       const seq = ["M","A","E","I","O","U","S","L","F","X"];
-      return Array.from({length: groups}, (_, i) => ({ t: i * 110, v: seq[i % seq.length] }));
+      return Array.from({ length: groups }, (_, i) => ({ t: i * 110, v: seq[i % seq.length] }));
     }
 
     function animate(marks) {
@@ -160,7 +145,7 @@ function setViseme(v) {
       raf = requestAnimationFrame(step);
     }
 
-    // ===== Speak handler (browser TTS) =====
+    // ---------- Speak handler (browser TTS) ----------
     speakBtn.onclick = async () => {
       playing = true;
       const marks = fakeTimeline(txt.value);
@@ -181,9 +166,6 @@ function setViseme(v) {
       playing = false;
       setViseme("X");
     };
-
-    // Boot: check which sprites exist
-   
   </script>
 </body>
 </html>
