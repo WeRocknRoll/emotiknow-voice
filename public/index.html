@@ -72,22 +72,24 @@
 
   <!-- JS goes at the end so DOM is ready -->
   <script>
-    // ===== Sprite config + fallback =====
-    const MOUTH_BASE = "/mouth/";
-    const VISEMES = ["X","A","E","I","O","U","M","F","L","S"];
-    const FALLBACK = { E:"S", I:"E", U:"O", M:"X", L:"A", F:"S" };
-    const SPRITE_EXISTS = {};
+// --- sprite config + fallback (using only the PNGs you have now) ---
+const MOUTH_BASE = "/mouth/";
 
-    async function probeSprites() {
-      await Promise.all(
-        VISEMES.map(v => new Promise(resolve => {
-          const img = new Image();
-          img.onload  = () => { SPRITE_EXISTS[v] = true;  resolve(); };
-          img.onerror = () => { SPRITE_EXISTS[v] = false; resolve(); };
-          img.src = `${MOUTH_BASE}${v}.png`;
-        }))
-      );
-    }
+// You currently have these files in /public/mouth/
+// (Make a copy of M.png as X.png if you haven't yet.)
+const HAVE = { O:true, U:true, I:true, M:true, X:true };
+
+// If a viseme PNG is missing, reuse the closest one:
+const FALLBACK = {
+  A: "O",   // wide open → round
+  E: "I",   // smile-narrow → vertical narrow
+  F: "I",   // teeth on lip → vertical narrow
+  L: "A",   // tongue → wide/round works for now
+  S: "I"    // narrow teeth → vertical narrow
+};
+
+// Helper
+function spriteExists(v){ return !!HAVE[v]; }
 
     // ===== DOM refs =====
     const txt = document.getElementById("text");
