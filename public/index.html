@@ -4,95 +4,101 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EmotiKnow — Mouth Sync Preview</title>
-  <link rel="stylesheet" href="/style.css" />
+
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
-    .wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 16px; }
-    .panel { border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; }
-    .stage { position: relative; width: 640px; height: 360px; margin: 0 auto; }
-    .stage img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+    :root { color-scheme: dark; }
+    body { margin:0; background:#0b0f14; color:#eef1f5; font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 28px; }
+    h1 { font-size: 36px; margin: 0 0 18px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .panel { border: 1px solid #1b2632; border-radius: 18px; padding: 16px; background: #0f141b; box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }
+    textarea { width: 100%; background:#0a0f14; color:#dfe6ee; border:1px solid #1b2632; border-radius:16px; padding:14px; resize: vertical; }
+    button { background:#0f62fe; color:#fff; border:0; padding:10px 18px; border-radius:14px; font-weight:600; cursor:pointer; }
+    button:disabled { opacity:.6; cursor: default; }
+    .row { display:flex; align-items:center; gap:12px; margin-top:12px; }
+    label { font-size:12px; opacity:.8; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:center; }
+    input[type="range"] { width:100%; }
+    input[type="text"] { width:100%; padding:10px; border-radius:12px; border:1px solid #1b2632; background:#0a0f14; color:#eaf0f7; }
+    .stage { position: relative; width: 640px; height: 360px; margin: 8px auto 0; border-radius: 18px; overflow: hidden; background:#000; }
+    .stage img.bg { width:100%; height:100%; object-fit: cover; display:block; }
     .mouth { position: absolute; pointer-events: none; transform-origin: center; }
-    button { background: #111; color: #fff; border: 0; padding: 10px 16px; border-radius: 14px; }
-    input[type="range"] { width: 100%; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    label { font-size: 12px; opacity: .8; }
+    #mouthImg { width:300px; height:160px; image-rendering: auto; mix-blend-mode: multiply; filter: contrast(1.05) saturate(.95); }
+    .hint { font-size:12px; opacity:.7; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>EmotiKnow — Mouth Sync Preview</h1>
 
-    <div class="panel">
-      <textarea id="text" rows="3" style="width:100%; border-radius:12px; padding:12px;">
-Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?
-      </textarea>
-      <div style="display:flex; gap:12px; align-items:center; margin-top:10px;">
-        <button id="speak">Speak</button>
-        <span style="font-size:12px; opacity:.7;">Viseme: <b id="viseme">X</b></span>
+    <div class="grid">
+      <!-- LEFT: text + speak -->
+      <div class="panel">
+        <label for="text">Script</label>
+        <textarea id="text" rows="6">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?</textarea>
+        <div class="row">
+          <button id="speak">Speak</button>
+          <span class="hint">Viseme: <b id="viseme">X</b></span>
+        </div>
+        <p class="hint" style="margin-top:10px">
+          Tip: This demo uses browser speech and a generated timeline. When you’re ready, we’ll switch to a TTS API that returns real viseme timestamps.
+        </p>
       </div>
-    </div>
 
-    <div class="panel">
-      <div class="grid2">
-        <div>
+      <!-- RIGHT: image + overlay controls -->
+      <div class="panel">
+        <div class="grid2" style="margin-bottom:10px;">
           <label>Image URL</label>
-          <input id="imgUrl" value="/emma.jpg" style="width:100%; padding:8px; border-radius:10px; border:1px solid #e5e7eb;" />
-        </div>
-        <div></div>
-
-        <div>
+          <input id="imgUrl" type="text" value="/emma.jpg" />
           <label>Mouth X: <span id="lx">165</span>px</label>
-          <input type="range" id="mx" min="0" max="500" value="165">
+          <input type="range" id="mx" min="0" max="600" value="260" />
+          <label>Mouth Y: <span id="ly">98</span>px</label>
+          <input type="range" id="my" min="0" max="300" value="98" />
+          <label>Scale: <span id="ls">0.50</span></label>
+          <input type="range" id="ms" min="0.4" max="2" step="0.01" value="0.50" />
+          <label>Rotate: <span id="lr">-1</span>°</label>
+          <input type="range" id="mr" min="-20" max="20" step="1" value="-1" />
         </div>
-        <div>
-          <label>Mouth Y: <span id="ly">270</span>px</label>
-          <input type="range" id="my" min="0" max="500" value="270">
-        </div>
-        <div>
-          <label>Scale: <span id="ls">1.00</span></label>
-          <input type="range" id="ms" min="0.5" max="2" step="0.01" value="1.00">
-        </div>
-        <div>
-          <label>Rotate: <span id="lr">0</span>°</label>
-          <input type="range" id="mr" min="-20" max="20" value="0">
-        </div>
-      </div>
 
-      <div class="stage">
-        <img id="bg" src="/emma.jpg" alt="Emma">
-        <!-- SVG mouth overlay -->
-        <div class="mouth" id="mouth" style="left:165px; top:270px; transform: scale(1) rotate(0deg);">
-          <svg width="140" height="100" viewBox="50 85 100 70">
-            <path id="mouthPath" d="M60 112 Q100 115 140 112 Q100 118 60 112 Z" fill="#8b1a1a" stroke="#5f0f0f" stroke-width="2"/>
-          </svg>
+        <div class="stage">
+          <img id="bg" class="bg" src="/emma.jpg" alt="Emma" />
+          <div class="mouth" id="mouth" style="left:260px; top:98px; transform: scale(0.50) rotate(-1deg);">
+            <img id="mouthImg" src="/mouth/X.png" alt="mouth sprite" />
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- JS goes at the end so DOM is ready -->
   <script>
-    const pathFor = (v) => {
-      switch (v) {
-        case "M": return "M60 110 Q100 120 140 110 Q100 118 60 110 Z";
-        case "F": return "M60 108 Q100 112 140 108 Q100 120 60 108 Z";
-        case "L": return "M60 113 Q100 130 140 113 Q100 132 60 113 Z";
-        case "S": return "M60 112 Q100 118 140 112 Q100 120 60 112 Z";
-        case "A": return "M60 95 Q100 145 140 95 Q100 165 60 95 Z";
-        case "E": return "M60 105 Q100 120 140 105 Q100 130 60 105 Z";
-        case "I": return "M85 102 Q100 135 115 102 Q100 150 85 102 Z";
-        case "O": return "M80 100 Q100 145 120 100 Q100 155 80 100 Z";
-        case "U": return "M82 96 Q100 148 118 96 Q100 160 82 96 Z";
-        default:  return "M60 112 Q100 115 140 112 Q100 118 60 112 Z";
-      }
-    };
+    // ===== Sprite config + fallback =====
+    const MOUTH_BASE = "/mouth/";
+    const VISEMES = ["X","A","E","I","O","U","M","F","L","S"];
+    const FALLBACK = { E:"S", I:"E", U:"O", M:"X", L:"A", F:"S" };
+    const SPRITE_EXISTS = {};
+
+    async function probeSprites() {
+      await Promise.all(
+        VISEMES.map(v => new Promise(resolve => {
+          const img = new Image();
+          img.onload  = () => { SPRITE_EXISTS[v] = true;  resolve(); };
+          img.onerror = () => { SPRITE_EXISTS[v] = false; resolve(); };
+          img.src = `${MOUTH_BASE}${v}.png`;
+        }))
+      );
+    }
+
+    // ===== DOM refs =====
+    const txt = document.getElementById("text");
+    const speakBtn = document.getElementById("speak");
+    const visemeEl = document.getElementById("viseme");
+    const bg = document.getElementById("bg");
+    const imgUrl = document.getElementById("imgUrl");
 
     const mouth = document.getElementById("mouth");
-    const mouthPath = document.getElementById("mouthPath");
-    const speakBtn = document.getElementById("speak");
-    const txt = document.getElementById("text");
-    const visemeEl = document.getElementById("viseme");
+    const mouthImg = document.getElementById("mouthImg");
 
-    // sliders
     const mx = document.getElementById("mx");
     const my = document.getElementById("my");
     const ms = document.getElementById("ms");
@@ -101,8 +107,6 @@ Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?
     const ly = document.getElementById("ly");
     const ls = document.getElementById("ls");
     const lr = document.getElementById("lr");
-    const imgUrl = document.getElementById("imgUrl");
-    const bg = document.getElementById("bg");
 
     function updateOverlay() {
       mouth.style.left = mx.value + "px";
@@ -112,6 +116,17 @@ Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?
     }
     mx.oninput = my.oninput = ms.oninput = mr.oninput = updateOverlay;
     imgUrl.onchange = () => { bg.src = imgUrl.value; };
+    updateOverlay();
+
+    // ===== Viseme update =====
+    function setViseme(v) {
+      const pick = SPRITE_EXISTS[v] ? v : (SPRITE_EXISTS[FALLBACK[v]] ? FALLBACK[v] : "X");
+      mouthImg.src = `${MOUTH_BASE}${pick}.png`;
+      visemeEl.textContent = v;
+    }
+
+    // ===== Timeline & animation =====
+    let playing = false, raf = null, t0 = 0;
 
     function fakeTimeline(text) {
       const clean = text.trim().replace(/\s+/g, " ");
@@ -120,22 +135,20 @@ Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?
       return Array.from({length: groups}, (_, i) => ({ t: i * 110, v: seq[i % seq.length] }));
     }
 
-    let raf = null, start = 0, playing = false;
-
     function animate(marks) {
-      start = performance.now();
+      t0 = performance.now();
       const step = () => {
-        const elapsed = performance.now() - start;
+        const elapsed = performance.now() - t0;
         let v = "X";
         for (let i = 0; i < marks.length; i++) { if (elapsed >= marks[i].t) v = marks[i].v; else break; }
-        mouthPath.setAttribute("d", pathFor(v));
-        visemeEl.textContent = v;
+        setViseme(v);
         if (playing) raf = requestAnimationFrame(step);
       };
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(step);
     }
 
+    // ===== Speak handler (browser TTS) =====
     speakBtn.onclick = async () => {
       playing = true;
       const marks = fakeTimeline(txt.value);
@@ -154,11 +167,11 @@ Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?
       }
 
       playing = false;
-      mouthPath.setAttribute("d", pathFor("X"));
-      visemeEl.textContent = "X";
+      setViseme("X");
     };
 
-    updateOverlay();
+    // Boot: check which sprites exist
+    probeSprites();
   </script>
 </body>
 </html>
