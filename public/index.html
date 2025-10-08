@@ -1,106 +1,266 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>EmotiKnow Emma</title>
-  <style>
-    body { background:#111; color:white; font-family:sans-serif; }
-    #container { position:relative; display:inline-block; }
-    #avatar { display:block; max-width:400px; }
-    #mouth {
-      position:absolute;
-      top:0;
-      left:0;
-      transform-origin:center center;
-      pointer-events:none;
-    }
-    .controls { margin-top:20px; }
-    textarea { width:300px; height:80px; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EmotiKnow Emma — Smooth Mouth</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0b0f14; color:#eaf0f7; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { max-width:980px; margin:24px auto; padding:0 16px; }
+  h1 { margin:0 0 14px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+  textarea, input[type="text"] { width:100%; background:#0a0f14; color:#eaf0f7; border:1px solid #1b2632; border-radius:10px; padding:10px; }
+  button { background:#0f62fe; color:#fff; border:0; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer; }
+  input[type="range"] { width:260px; }
+  .stage { position:relative; width:640px; height:360px; border-radius:14px; overflow:hidden; background:#000; }
+  .stage img#bg { width:100%; height:100%; object-fit:cover; display:block; }
+
+  /* Dual mouth layers for crossfading */
+  .mouth { position:absolute; transform-origin:center center; pointer-events:none; }
+  .mouth-layer { position:absolute; left:0; top:0; width:300px; height:160px; }
+  .mouth-layer img { position:absolute; inset:0; width:100%; height:100%; image-rendering:auto; mix-blend-mode:multiply; filter:contrast(1.04) saturate(.96); }
+</style>
 </head>
 <body>
-  <h1>EmotiKnow Emma</h1>
+<div class="wrap">
+  <h1>EmotiKnow Emma — Smooth Sprite Mouth</h1>
 
-  <div id="container">
-    <img id="avatar" src="emma.jpg" />
-    <img id="mouth" src="/mouth/X.png" />
+  <div class="stage" id="stage">
+    <img id="bg" src="/emma.jpg" alt="Emma" />
+    <!-- mouth overlay -->
+    <div id="mouth" class="mouth" style="left:260px; top:98px; transform:scale(.50) rotate(-1deg);">
+      <div class="mouth-layer"><img id="mouthA" src="/mouth/X.png" alt=""></div>
+      <div class="mouth-layer"><img id="mouthB" src="/mouth/X.png" alt=""></div>
+    </div>
   </div>
 
-  <div class="controls">
-    <p>Script</p>
-    <textarea id="text">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?</textarea><br>
-    <button id="speak">Speak</button> Viseme: <span id="viseme">X</span>
-    <br><br>
-    Mouth X: <input type="range" id="mouthX" min="0" max="400" value="165"><br>
-    Mouth Y: <input type="range" id="mouthY" min="0" max="400" value="100"><br>
-    Scale: <input type="range" id="mouthScale" min="0.2" max="2" step="0.01" value="0.5"><br>
-    Rotate: <input type="range" id="mouthRotate" min="-30" max="30" step="1" value="0"><br>
+  <div class="row"><div style="min-width:90px">Script</div><textarea id="text" rows="4">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?</textarea></div>
+  <div class="row">
+    <button id="speak">Speak</button>
+    <div>Viseme: <b id="viseme">X</b></div>
   </div>
+
+  <div class="row"><div style="min-width:90px">Image URL</div><input id="imgUrl" type="text" value="/emma.jpg" /></div>
+  <div class="row"><div style="min-width:90px">Mouth X: <span id="lx">260</span>px</div><input id="mx" type="range" min="0" max="600" value="260" /></div>
+  <div class="row"><div style="min-width:90px">Mouth Y: <span id="ly">98</span>px</div><input id="my" type="range" min="0" max="300" value="98" /></div>
+  <div class="row"><div style="min-width:90px">Scale: <span id="ls">0.50</span></div><input id="ms" type="range" min="0.2" max="2" step="0.01" value="0.50" /></div>
+  <div class="row"><div style="min-width:90px">Rotate: <span id="lr">-1</span>°</div><input id="mr" type="range" min="-30" max="30" step="1" value="-1" /></div>
+
+  <p style="opacity:.7;font-size:13px">Tip: for best results, all mouth PNGs should be the *same canvas size* (e.g., 300×160) and aligned to the guide.</p>
+</div>
 
 <script>
+/* ====== CONFIG ====== */
 const VISEMES = ["X","A","E","I","O","U","M","F","L","S"];
-const MOUTH_BASE = "/mouth/";
+const FALLBACK = { A:"O", E:"I", F:"I", L:"A", S:"I" };           // if something missing
+const PNG_BASE = "/mouth/";
 
-const mouthImg = document.getElementById("mouth");
-const visemeEl = document.getElementById("viseme");
+/* Smoothness knobs */
+const HOLD_MS       = 70;     // how long to hold each viseme before changing
+const CROSSFADE_MS  = 110;    // how long to crossfade to the next viseme
+const TWEEN_FPS_CAP = 90;     // frame cap (safety)
 
-const sliders = {
-  x: document.getElementById("mouthX"),
-  y: document.getElementById("mouthY"),
-  scale: document.getElementById("mouthScale"),
-  rot: document.getElementById("mouthRotate")
-};
+/* Micro-mouth motion (very subtle) */
+const MICRO = { bobPx: 0.8, tiltDeg: 0.35, vowelBoost: 1.6, speed: 9.0 };
+const VOWELS = new Set(["A","E","I","O","U"]);
 
-function updateTransform() {
-  const x = sliders.x.value;
-  const y = sliders.y.value;
-  const s = sliders.scale.value;
-  const r = sliders.rot.value;
-  mouthImg.style.left = x+"px";
-  mouthImg.style.top = y+"px";
-  mouthImg.style.transform = `scale(${s}) rotate(${r}deg)`;
+/* ====== DOM ====== */
+const textEl = document.getElementById('text');
+const speakBtn = document.getElementById('speak');
+const visemeEl = document.getElementById('viseme');
+
+const imgUrl = document.getElementById('imgUrl');
+const bg = document.getElementById('bg');
+
+const mouth = document.getElementById('mouth');
+const mouthA = document.getElementById('mouthA');
+const mouthB = document.getElementById('mouthB');
+
+const mx = document.getElementById('mx'); const lx = document.getElementById('lx');
+const my = document.getElementById('my'); const ly = document.getElementById('ly');
+const ms = document.getElementById('ms'); const ls = document.getElementById('ls');
+const mr = document.getElementById('mr'); const lr = document.getElementById('lr');
+
+/* ====== STATE ====== */
+let baseScale = parseFloat(ms.value);
+let baseRotate = parseFloat(mr.value);
+let raf = null, startTime = 0, playing = false;
+let activeIsA = true;     // which layer is top
+let currentV = "X";
+
+const SPRITE_EXISTS = {};
+
+/* ====== UTIL ====== */
+function preloadSprites() {
+  return Promise.all(VISEMES.map(v => new Promise(res => {
+    const im = new Image();
+    im.onload = () => { SPRITE_EXISTS[v] = true; res(); };
+    im.onerror = () => { SPRITE_EXISTS[v] = false; res(); };
+    im.src = `${PNG_BASE}${v}.png`;
+  })));
 }
 
-// attach slider updates
-Object.values(sliders).forEach(sl => sl.addEventListener("input", updateTransform));
-updateTransform();
+function pickSprite(v) {
+  if (SPRITE_EXISTS[v]) return v;
+  const fb = FALLBACK[v] || "X";
+  return SPRITE_EXISTS[fb] ? fb : "X";
+}
 
-function setViseme(v) {
-  if (!VISEMES.includes(v)) v = "X";
-  mouthImg.src = `${MOUTH_BASE}${v}.png`;
+function setVisemeLabel(v) {
   visemeEl.textContent = v;
 }
 
-// Fake timeline generator
-function fakeTimeline(text) {
-  const seq = ["M","A","E","I","O","U","S","L","F","X"];
-  const groups = Math.max(8, Math.min(60, text.length / 2));
-  return Array.from({length: groups}, (_,i)=>({t:i*120, v:seq[i%seq.length]}));
+function updateOverlayFromSliders() {
+  mouth.style.left = mx.value + 'px';
+  mouth.style.top  = my.value + 'px';
+  baseScale = parseFloat(ms.value);
+  baseRotate = parseFloat(mr.value);
+  mouth.style.transform = `scale(${baseScale}) rotate(${baseRotate}deg)`;
+  lx.textContent = mx.value; ly.textContent = my.value; ls.textContent = (+ms.value).toFixed(2); lr.textContent = mr.value;
 }
+[mx,my,ms,mr].forEach(el => el.addEventListener('input', updateOverlayFromSliders));
+imgUrl.addEventListener('change', () => { bg.src = imgUrl.value; });
+updateOverlayFromSliders();
 
-// Animate
-function animate(marks, start) {
-  const step = () => {
-    const elapsed = performance.now() - start;
-    let v="X";
-    for (let i=0;i<marks.length;i++) {
-      if (elapsed >= marks[i].t) v=marks[i].v; else break;
-    }
-    setViseme(v);
-    if (elapsed < marks[marks.length-1].t) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-
-document.getElementById("speak").onclick = async () => {
-  const txt = document.getElementById("text").value.trim();
-  const marks = fakeTimeline(txt);
-  const u = new SpeechSynthesisUtterance(txt);
-  u.rate=1;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
-  animate(marks, performance.now());
+/* ====== CROSSFADE ENGINE ====== */
+let fade = { // fade state
+  from: "X", to: "X",
+  t0: 0, holdUntil: 0, doneAt: 0,
+  alpha: 0
 };
+
+function beginFade(nextV, now) {
+  const to = pickSprite(nextV);
+  if (to === fade.to) return;               // same target, ignore
+  fade.from = fade.to;
+  fade.to = to;
+  fade.t0 = now;
+  fade.holdUntil = now + HOLD_MS;
+  fade.doneAt = fade.holdUntil + CROSSFADE_MS;
+  fade.alpha = 0;
+
+  // put next image on the inactive layer
+  const top = activeIsA ? mouthB : mouthA;
+  top.src = `${PNG_BASE}${to}.png`;
+  // immediately set layer opacities for fade start
+  mouthA.style.opacity = activeIsA ? 1 : 0;
+  mouthB.style.opacity = activeIsA ? 0 : 1;
+
+  setVisemeLabel(nextV);
+}
+
+function stepFade(now) {
+  if (now < fade.holdUntil) {
+    fade.alpha = 0;
+    return;
+  }
+  if (now >= fade.doneAt) {
+    fade.alpha = 1;
+    // swap layers
+    activeIsA = !activeIsA;
+    mouthA.style.opacity = activeIsA ? 1 : 0;
+    mouthB.style.opacity = activeIsA ? 0 : 1;
+    fade.from = fade.to;
+    return;
+  }
+  const p = (now - fade.holdUntil) / (fade.doneAt - fade.holdUntil);
+  fade.alpha = Math.min(1, Math.max(0, p));
+  // animate opacity
+  if (activeIsA) { // A on top initially
+    mouthA.style.opacity = 1 - fade.alpha;
+    mouthB.style.opacity = fade.alpha;
+  } else {
+    mouthA.style.opacity = fade.alpha;
+    mouthB.style.opacity = 1 - fade.alpha;
+  }
+}
+
+/* ====== MICRO MOTION ====== */
+function applyMicroMotion(nowMs) {
+  const t = (nowMs - startTime) / 1000;
+  const isVowel = VOWELS.has(currentV);
+  const boost = isVowel ? MICRO.vowelBoost : 1.0;
+  const mb = Math.sin(t * 2*Math.PI * MICRO.speed) * MICRO.bobPx * boost;
+  const mt = Math.sin(t * 2*Math.PI * (MICRO.speed*0.5)) * MICRO.tiltDeg * boost * .7;
+  mouth.style.transform = `translateY(${mb}px) scale(${baseScale}) rotate(${baseRotate+mt}deg)`;
+}
+
+/* ====== TIMELINE ====== */
+/* For now we still fake a timeline, but denser, so blends look good */
+function makeTimeline(text) {
+  // More groups => more but shorter events for smoother fading
+  const clean = text.trim().replace(/\s+/g, " ");
+  const groups = Math.max(14, Math.min(90, Math.ceil(clean.length / 2.8)));
+  const seq = ["M","A","E","I","O","U","S","L","F","X"];
+  const ms = HOLD_MS + CROSSFADE_MS - 20; // slight overlap for continuous motion
+  return Array.from({length: groups}, (_, i) => ({ t: i * ms, v: seq[i % seq.length] }));
+}
+
+/* ====== MAIN LOOP ====== */
+function animate(marks) {
+  startTime = performance.now();
+  let i = 0;
+  let lastV = "X";
+
+  const loop = (now) => {
+    // update target viseme if we've reached next mark
+    while (i < marks.length && now - startTime >= marks[i].t) {
+      currentV = marks[i].v;
+      if (currentV !== lastV) {
+        beginFade(currentV, now);
+        lastV = currentV;
+      }
+      i++;
+    }
+
+    stepFade(now);            // progress crossfade
+    applyMicroMotion(now);    // tiny physical feel
+    // continue until the final fade completes
+    if (playing) raf = requestAnimationFrame(loop);
+  };
+
+  if (raf) cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(loop);
+}
+
+/* ====== SPEAK ====== */
+async function speak(text) {
+  const synth = window.speechSynthesis;
+  if (!synth) {
+    const est = Math.max(1500, Math.min(8000, text.length * 55));
+    return new Promise(res => setTimeout(res, est));
+  }
+  try { synth.cancel(); } catch(e){}
+  return new Promise(res => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 1.02; // a touch warmer
+    u.onend = res; u.onerror = res;
+    synth.speak(u);
+  });
+}
+
+/* ====== BOOT ====== */
+preloadSprites().then(() => {
+  // Prime both layers to X
+  mouthA.src = `${PNG_BASE}X.png`;
+  mouthB.src = `${PNG_BASE}X.png`;
+  mouthA.style.opacity = 1;
+  mouthB.style.opacity = 0;
+});
+
+speakBtn.addEventListener('click', async () => {
+  const text = textEl.value.trim();
+  if (!text) return;
+  playing = true;
+  const marks = makeTimeline(text);
+  animate(marks);
+  await speak(text);
+  // Wrap up
+  playing = false;
+  beginFade("X", performance.now());
+});
+
 </script>
 </body>
 </html>
