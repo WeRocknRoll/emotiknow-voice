@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>EmotiKnow Emma — Smooth Sprite Mouth</title>
+  <title>EmotiKnow Emma — Mouth + Head Motion + Blinks</title>
   <style>
     :root { color-scheme: dark; }
     body { margin:0; background:#0b0f14; color:#eef1f5; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
@@ -21,12 +21,16 @@
     input[type="text"] { width:100%; padding:10px; border-radius:12px; border:1px solid #1b2632; background:#0a0f14; color:#eaf0f7; }
 
     .stage { position:relative; width:640px; height:360px; margin:8px auto 0; border-radius:18px; overflow:hidden; background:#000; }
-    .bgWrap { position:absolute; inset:0; }
-    .stage img.bg { width:100%; height:100%; object-fit:cover; display:block; }
+    .bgWrap { position:absolute; inset:0; transform-origin:center; }
+    .bg { width:100%; height:100%; object-fit:cover; display:block; }
+
+    /* Blink overlay: a dark top lid that animates down/up */
+    .blink { position:absolute; left:0; right:0; top:0; height:0; 
+             background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.15), rgba(0,0,0,0));
+             pointer-events:none; transition: height 90ms ease; }
 
     .mouth { position:absolute; pointer-events:none; transform-origin:center; }
     .mouth-layer { position:absolute; left:0; top:0; width:300px; height:160px; }
-    /* crossfade */
     .mouth-layer img { position:absolute; left:0; top:0; width:100%; height:100%;
       image-rendering:auto; mix-blend-mode:multiply; filter:contrast(1.05) saturate(.95);
       transition: opacity 120ms linear;
@@ -36,7 +40,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>EmotiKnow Emma — Smooth Sprite Mouth</h1>
+    <h1>EmotiKnow Emma — Smooth Sprite + Head Motion + Blinks</h1>
 
     <div class="grid">
       <!-- LEFT: text + speak -->
@@ -48,7 +52,7 @@
           <span class="hint">Viseme: <b id="viseme">X</b></span>
         </div>
         <p class="hint" style="margin-top:10px">
-          Now with <b>crossfades</b> and subtle <b>micro-motion</b> (bob + tilt) for smoother, more lifelike movement — still 100% browser-side.
+          This demo adds gentle <b>head bob/tilt</b> and random <b>eye blinks</b> (2D) — still $0 GPU. For true facial reanimation, we’ll use SadTalker later.
         </p>
       </div>
 
@@ -68,44 +72,33 @@
         </div>
 
         <div class="stage">
+          <!-- Head layer (we animate this for bob/tilt) -->
           <div class="bgWrap" id="bgWrap">
             <img id="bg" class="bg" src="/emma.jpg" alt="Emma" />
+            <div class="blink" id="blink"></div>
           </div>
 
           <!-- Mouth overlay: dual-layer crossfade -->
           <div class="mouth" id="mouth" style="left:260px; top:98px; transform:scale(0.50) rotate(-1deg);">
-            <div class="mouth-layer">
-              <img id="mouthA" src="/mouth/X.png" alt="mouth A" style="opacity:1" />
-            </div>
-            <div class="mouth-layer">
-              <img id="mouthB" src="/mouth/X.png" alt="mouth B" style="opacity:0" />
-            </div>
+            <div class="mouth-layer"><img id="mouthA" src="/mouth/X.png" alt="mouth A" style="opacity:1" /></div>
+            <div class="mouth-layer"><img id="mouthB" src="/mouth/X.png" alt="mouth B" style="opacity:0" /></div>
           </div>
         </div>
 
         <p class="hint" style="margin-top:10px">
-          Tip: vowels (A/E/I/O/U) gently increase bob/tilt for a more “alive” feel. You can tune the values in code (look for <code>MICRO</code>).
+          Tip: tune micro-motion in code (<code>MICRO_HEAD</code>, <code>MICRO_MOUTH</code>). Keep values subtle for realism.
         </p>
       </div>
     </div>
   </div>
 
-  <!-- ===== JS (keep all inside this single script) ===== -->
+  <!-- ===== JS ===== -->
   <script>
     // ---------- Sprite config + fallback ----------
     const MOUTH_BASE = "/mouth/";
-
-    // Files you currently have. Make sure X.png exists (copy M.png -> X.png if needed).
+    // Files you currently have. Ensure X.png exists (copy M.png -> X.png if needed).
     const HAVE = { O:true, U:true, I:true, M:true, X:true };
-
-    // Map missing visemes to closest available one.
-    const FALLBACK = {
-      A: "O",   // wide → round
-      E: "I",   // smile-narrow → vertical narrow
-      F: "I",   // teeth on lip → vertical narrow
-      L: "A",   // tongue → wide/round works for now
-      S: "I"    // narrow teeth → vertical narrow
-    };
+    const FALLBACK = { A:"O", E:"I", F:"I", L:"A", S:"I" };
 
     // ---------- DOM refs ----------
     const txt = document.getElementById("text");
@@ -114,8 +107,9 @@
 
     const bgWrap = document.getElementById("bgWrap");
     const bg = document.getElementById("bg");
-    const imgUrl = document.getElementById("imgUrl");
+    const blinkEl = document.getElementById("blink");
 
+    const imgUrl = document.getElementById("imgUrl");
     const mouth = document.getElementById("mouth");
     const mouthA = document.getElementById("mouthA");
     const mouthB = document.getElementById("mouthB");
@@ -132,75 +126,81 @@
     function updateOverlay() {
       mouth.style.left = mx.value + "px";
       mouth.style.top = my.value + "px";
-      baseScale = parseFloat(ms.value);
-      baseRotate = parseFloat(mr.value);
-      // micro-motion gets added on top each frame; we only set base here
-      mouth.style.transform = `scale(${baseScale}) rotate(${baseRotate}deg)`;
+      baseMouthScale = parseFloat(ms.value);
+      baseMouthRotate = parseFloat(mr.value);
+      mouth.style.transform = `scale(${baseMouthScale}) rotate(${baseMouthRotate}deg)`;
       lx.textContent = mx.value; ly.textContent = my.value; ls.textContent = (+ms.value).toFixed(2); lr.textContent = mr.value;
     }
     mx.oninput = my.oninput = ms.oninput = mr.oninput = updateOverlay;
     imgUrl.onchange = () => { bg.src = imgUrl.value; };
     updateOverlay();
 
-    // ---------- Crossfade state ----------
-    let useA = true;   // which layer is currently visible
-    let lastPick = "X";
-
-    function pickSprite(v) {
-      return HAVE[v] ? v : (FALLBACK[v] || "X");
-    }
-
+    // ---------- Viseme crossfade ----------
+    let useA = true, lastPick = "X";
+    function pickSprite(v){ return HAVE[v] ? v : (FALLBACK[v] || "X"); }
     function setViseme(v) {
       const pick = pickSprite(v);
-      if (pick === lastPick) {
-        visemeEl.textContent = v;
-        return; // no asset change, keep showing
-      }
+      if (pick === lastPick) { visemeEl.textContent = v; return; }
       lastPick = pick;
-
-      const nextImg = useA ? mouthB : mouthA; // the one that is currently hidden
+      const nextImg = useA ? mouthB : mouthA;
       nextImg.src = `${MOUTH_BASE}${pick}.png`;
-
-      // ensure the browser has a moment to load before fading in
       requestAnimationFrame(() => {
-        // fade current out, next in
-        if (useA) {
-          mouthA.style.opacity = 0;
-          mouthB.style.opacity = 1;
-        } else {
-          mouthA.style.opacity = 1;
-          mouthB.style.opacity = 0;
-        }
+        if (useA) { mouthA.style.opacity = 0; mouthB.style.opacity = 1; }
+        else      { mouthA.style.opacity = 1; mouthB.style.opacity = 0; }
         useA = !useA;
       });
-
-      visemeEl.textContent = v; // show requested letter
+      visemeEl.textContent = v;
     }
 
-    // ---------- Micro-motion (subtle bob + tilt) ----------
-    // Tunables
-    const MICRO = {
-      bobPx: 1.2,          // base bob amplitude in pixels
-      tiltDeg: 0.35,       // base tilt amplitude in degrees
-      vowelBoost: 1.7,     // vowels A/E/I/O/U increase amplitude
-      speed: 9.0           // oscillations per second (approx)
+    // ---------- Micro-motions ----------
+    // Head (2D) – gentle bob/tilt/zoom (always running while speaking)
+    const MICRO_HEAD = {
+      bobPx: 0.8,        // vertical pixels
+      tiltDeg: 0.25,     // degrees
+      zoomAmp: 0.004,    // scale +/- around 1.0
+      speed: 0.6         // Hz (cycles per second)
+    };
+
+    // Mouth – subtle extra movement, boosted on vowels
+    const MICRO_MOUTH = {
+      bobPx: 1.2,
+      tiltDeg: 0.35,
+      vowelBoost: 1.7,
+      speed: 9.0
     };
     const VOWELS = new Set(["A","E","I","O","U"]);
 
     let playing = false, raf = null, t0 = 0;
-    let baseScale = parseFloat(ms.value), baseRotate = parseFloat(mr.value);
+    let baseMouthScale = parseFloat(ms.value), baseMouthRotate = parseFloat(mr.value);
     let currentV = "X";
 
-    function animateTransform(now) {
-      // time since start in seconds
+    function animateTransforms(now) {
       const t = (now - t0) / 1000;
-      const isVowel = VOWELS.has(currentV);
-      const boost = isVowel ? MICRO.vowelBoost : 1.0;
-      const bob = Math.sin(t * 2 * Math.PI * MICRO.speed) * MICRO.bobPx * boost;
-      const tilt = Math.sin(t * 2 * Math.PI * (MICRO.speed * 0.5)) * MICRO.tiltDeg * boost * 0.7;
 
-      // apply only to mouth (keeps Emma image stable)
-      mouth.style.transform = `translateY(${bob}px) scale(${baseScale}) rotate(${baseRotate + tilt}deg)`;
+      // Head
+      const hb = Math.sin(t * 2 * Math.PI * MICRO_HEAD.speed) * MICRO_HEAD.bobPx;
+      const ht = Math.sin(t * 2 * Math.PI * (MICRO_HEAD.speed * 0.5)) * MICRO_HEAD.tiltDeg;
+      const hz = 1.0 + Math.sin(t * 2 * Math.PI * (MICRO_HEAD.speed * 0.33)) * MICRO_HEAD.zoomAmp;
+      bgWrap.style.transform = `translateY(${hb}px) rotate(${ht}deg) scale(${hz})`;
+
+      // Mouth
+      const isVowel = VOWELS.has(currentV);
+      const boost = isVowel ? MICRO_MOUTH.vowelBoost : 1.0;
+      const mb = Math.sin(t * 2 * Math.PI * MICRO_MOUTH.speed) * MICRO_MOUTH.bobPx * boost;
+      const mt = Math.sin(t * 2 * Math.PI * (MICRO_MOUTH.speed * 0.5)) * MICRO_MOUTH.tiltDeg * boost * 0.7;
+      mouth.style.transform = `translateY(${mb}px) scale(${baseMouthScale}) rotate(${baseMouthRotate + mt}deg)`;
+    }
+
+    // ---------- Random blink scheduler ----------
+    function scheduleBlink() {
+      if (!playing) return;
+      // next blink between 2.5s and 6s
+      const wait = 2500 + Math.random() * 3500;
+      setTimeout(() => {
+        // quick close then open
+        blinkEl.style.height = '44%';
+        setTimeout(() => { blinkEl.style.height = '0'; scheduleBlink(); }, 110); // open
+      }, wait);
     }
 
     // ---------- Timeline & master animation ----------
@@ -214,32 +214,26 @@
     function animate(marks) {
       t0 = performance.now();
       let i = 0;
-
       const step = (now) => {
         const elapsed = now - t0;
-
-        // advance viseme index
         while (i < marks.length && elapsed >= marks[i].t) {
           currentV = marks[i].v;
           setViseme(currentV);
           i++;
         }
-
-        // apply micro-motion every frame
-        animateTransform(now);
-
+        animateTransforms(now);
         if (playing) raf = requestAnimationFrame(step);
       };
-
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(step);
     }
 
-    // ---------- Speak handler (browser TTS) ----------
+    // ---------- Speak handler ----------
     speakBtn.onclick = async () => {
       playing = true;
       const marks = fakeTimeline(txt.value);
       animate(marks);
+      scheduleBlink();
 
       const synth = window.speechSynthesis;
       if (synth) {
@@ -253,11 +247,11 @@
         await new Promise(res => setTimeout(res, est));
       }
 
-      playing = false;
-      currentV = "X";
-      setViseme("X");
-      // reset transform back to base
-      mouth.style.transform = `scale(${baseScale}) rotate(${baseRotate}deg)`;
+      playing = false; currentV = "X"; setViseme("X");
+      // Reset transforms
+      bgWrap.style.transform = `rotate(0deg) scale(1)`;
+      mouth.style.transform = `scale(${baseMouthScale}) rotate(${baseMouthRotate}deg)`;
+      blinkEl.style.height = '0';
     };
   </script>
 </body>
