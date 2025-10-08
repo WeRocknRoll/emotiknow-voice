@@ -120,12 +120,22 @@ function spriteExists(v){ return !!HAVE[v]; }
     imgUrl.onchange = () => { bg.src = imgUrl.value; };
     updateOverlay();
 
-    // ===== Viseme update =====
-    function setViseme(v) {
-      const pick = SPRITE_EXISTS[v] ? v : (SPRITE_EXISTS[FALLBACK[v]] ? FALLBACK[v] : "X");
-      mouthImg.src = `${MOUTH_BASE}${pick}.png`;
-      visemeEl.textContent = v;
-    }
+    <!-- ===== Viseme update ===== -->
+<script>
+function setViseme(v) {
+  // Pick the correct viseme, fallback if missing
+  const pick = SPRITE_EXISTS[v] 
+    ? v 
+    : (SPRITE_EXISTS[FALLBACK[v]] ? FALLBACK[v] : "X");
+
+  // Load the corresponding mouth PNG
+  mouthImg.src = `${MOUTH_BASE}${pick}.png`;
+
+  // Debug: show current viseme letter in text
+  visemeEl.textContent = v;
+}
+</script>
+
 
     // ===== Timeline & animation =====
     let playing = false, raf = null, t0 = 0;
