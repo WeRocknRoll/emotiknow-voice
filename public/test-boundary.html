@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Emma Mouth — Boundary-Driven Visemes</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0b0f14; color:#eaf0f7; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { max-width:980px; margin:24px auto; padding:0 16px; }
+  h1 { margin:0 0 14px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+  textarea, input[type="text"] { width:100%; background:#0a0f14; color:#eaf0f7; border:1px solid #1b2632; border-radius:10px; padding:10px; }
+  button { background:#0f62fe; color:#fff; border:0; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer; }
+  input[type="range"] { width:260px; }
+  .stage { position:relative; width:640px; height:360px; border-radius:14px; overflow:hidden; background:#000; }
+  .stage img#bg { width:100%; height:100%; object-fit:cover; display:block; }
+  #mouth {
+    position:absolute; left:260px; top:98px;
+    width:300px; height:160px; pointer-events:none;
+    transform-origin:center center; transform:scale(.50) rotate(-1deg);
+  }
+  .layer { position:absolute; inset:0; opacity:0; transition:opacity 130ms linear; }
+  .layer img {
+    position:absolute; inset:0; width:100%; height:100%;
+    image-rendering:auto; mix-blend-mode:normal;
+    -webkit-mask-image: radial-gradient(80% 60% at 50% 55%, rgba(0,0,0,1) 65%, rgba(0,0,0,0) 100%);
+            mask-image: radial-gradient(80% 60% at 50% 55%, rgba(0,0,0,1) 65%, rgba(0,0,0,0) 100%);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Emma Mouth — Boundary-Driven Visemes</h1>
+
+  <div class="stage">
+    <img id="bg" src="/emma.jpg" alt="Emma" />
+    <div id="mouth">
+      <div id="L1" class="layer" style="opacity:1"><img src="/mouth/X.png" alt=""></div>
+      <div id="L2" class="layer" style="opacity:0"><img src="/mouth/X.png" alt=""></div>
+    </div>
+  </div>
+
+  <div class="row"><div style="min-width:90px">Script</div>
+    <textarea id="text" rows="3">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help you?</textarea>
+  </div>
+  <div class="row">
+    <button id="speak">Speak</button>
+    <div>Viseme: <b id="viseme">X</b></div>
+  </div>
+
+  <div class="row"><div style="min-width:90px">Image URL</div><input id="imgUrl" type="text" value="/emma.jpg" /></div>
+  <div class="row"><div style="min-width:90px">Mouth X: <span id="lx">260</span>px</div><input id="mx" type="range" min="0" max="600" value="260" /></div>
+  <div class="row"><div style="min-width:90px">Mouth Y: <span id="ly">98</span>px</div><input id="my" type="range" min="0" max="300" value="98" /></div>
+  <div class="row"><div style="min-width:90px">Scale: <span id="ls">0.50</span></div><input id="ms" type="range" min="0.2" max="2" step="0.01" value="0.50" /></div>
+  <div class="row"><div style="min-width:90px">Rotate: <span id="lr">-1</span>°</div><input id="mr" type="range" min="-30" max="30" step="1" value="-1" /></div>
+
+  <p style="opacity:.7;font-size:13px">
+    Needs <code>/public/emma.jpg</code> and <code>/public/mouth/{X,A,E,I,O,U,M,F,L,S}.png</code>. This version uses
+    <b>SpeechSynthesis onboundary</b> word timings → grapheme→viseme mapping, so vowels open on “Hi / I / how / you”.
+  </p>
+</div>
+
+<script>
+/* ===== sprite + timing config ===== */
+const PNG_BASE="/mouth/"; const VISEMES=["X","A","E","I","O","U","M","F","L","S"];
+const FALLBACK={A:"O",E:"I",F:"I",L:"A",S:"I"};
+const HOLD_MS=40;               // small hold per step (inside a word)
+const CROSSFADE_MS=110;         // smooth blend
+const STEP_MIN_MS=70;           // min duration per viseme step
+const OFFSETS={                 // keep upper lip anchored; jaw drops on A/O/U
+  X:{dx:0,dy:0,s:1.00}, M:{dx:0,dy:0,s:1.00},
+  E:{dx:0,dy:0,s:1.00}, I:{dx:0,dy:0,s:1.00},
+  A:{dx:0,dy:2,s:1.01}, O:{dx:0,dy:2,s:1.01},
+  U:{dx:0,dy:3,s:1.015}, F:{dx:0,dy:0,s:1.00},
+  L:{dx:0,dy:0,s:1.00}, S:{dx:0,dy:0,s:1.00}
+};
+
+/* ===== DOM ===== */
+const textEl=document.getElementById('text');
+const speakBtn=document.getElementById('speak');
+const visemeEl=document.getElementById('viseme');
+const imgUrl=document.getElementById('imgUrl'); const bg=document.getElementById('bg');
+const mouth=document.getElementById('mouth'); const L1=document.getElementById('L1'); const L2=document.getElementById('L2');
+const mx=document.getElementById('mx'), lx=document.getElementById('lx');
+const my=document.getElementById('my'), ly=document.getElementById('ly');
+const ms=document.getElementById('ms'), ls=document.getElementById('ls');
+const mr=document.getElementById('mr'), lr=document.getElementById('lr');
+
+/* ===== state ===== */
+let baseScale=+ms.value, baseRotate=+mr.value;
+let topIsL1=true, currentV="X", playing=false, raf=null;
+const EXISTS={};
+
+/* ===== helpers ===== */
+function updateOverlay(){ mouth.style.left=mx.value+'px'; mouth.style.top=my.value+'px';
+  baseScale=+ms.value; baseRotate=+mr.value; applyTransform(currentV);
+  lx.textContent=mx.value; ly.textContent=my.value; ls.textContent=(+ms.value).toFixed(2); lr.textContent=mr.value;
+}
+[mx,my,ms,mr].forEach(el=>el.addEventListener('input',updateOverlay));
+imgUrl.addEventListener('change',()=>{ bg.src=imgUrl.value; });
+updateOverlay();
+
+function preload(){ return Promise.all(VISEMES.map(v=>new Promise(r=>{ const im=new Image();
+  im.onload=()=>{EXISTS[v]=true; r();}; im.onerror=()=>{EXISTS[v]=false; r();}; im.src=`${PNG_BASE}${v}.png`; }))); }
+function spriteFor(v){ if(EXISTS[v]) return v; const fb=FALLBACK[v]||"X"; return EXISTS[fb]?fb:"X"; }
+function setVisemeLabel(v){ visemeEl.textContent=v; }
+function applyTransform(v){ const o=OFFSETS[v]||OFFSETS.X, s=baseScale*o.s;
+  mouth.style.transform=`translate(${o.dx}px,${o.dy}px) scale(${s}) rotate(${baseRotate}deg)`; }
+
+/* ===== crossfade ===== */
+let fade={ to:"X", tHold:0, tDone:0 };
+function beginFade(nextV, now){
+  const to=spriteFor(nextV); if(to===fade.to) return;
+  fade.to=to; fade.tHold=now+HOLD_MS; fade.tDone=fade.tHold+CROSSFADE_MS;
+
+  const nextLayer=topIsL1?L2:L1;
+  nextLayer.firstElementChild.src=`${PNG_BASE}${to}.png`;
+  L1.style.opacity=topIsL1?1:0; L2.style.opacity=topIsL1?0:1;
+  setVisemeLabel(nextV); currentV=nextV; applyTransform(currentV);
+}
+function stepFade(now){
+  if(now<fade.tHold) return;
+  if(now>=fade.tDone){ topIsL1=!topIsL1; L1.style.opacity=topIsL1?1:0; L2.style.opacity=topIsL1?0:1; return; }
+  const p=(now-fade.tHold)/(fade.tDone-fade.tHold);
+  if(topIsL1){ L1.style.opacity=1-p; L2.style.opacity=p; } else { L1.style.opacity=p; L2.style.opacity=1-p; }
+}
+
+/* ===== naive grapheme → viseme mapper (English-ish) ===== */
+const VOWEL = /[aeiouy]/;
+function mapChar(ch){
+  ch=ch.toLowerCase();
+  if('pbm'.includes(ch)) return 'M';
+  if('fv'.includes(ch))  return 'F';
+  if(ch==='l')           return 'L';
+  if('szcjxq'.includes(ch)) return 'S';   // sibilants/affricates → narrow
+  if(ch==='a') return 'A';
+  if(ch==='e') return 'E';
+  if(ch==='i' || ch==='y') return 'I';
+  if(ch==='o') return 'O';
+  if(ch==='u' || ch==='w') return 'U';
+  return 'X'; // neutral for other consonants
+}
+function wordToVisemes(word){
+  const w = word.toLowerCase().replace(/[^a-z]/g,'');
+  if(!w) return ['X'];
+  // Special quick wins for common words
+  const dict = {
+    'hi':['H','A','I'].map(mapChar), 'i':['I'],
+    'how':['H','O','U'].map(mapChar), 'you':['Y','U'].map(mapChar),
+    'help':['H','E','L','P'].map(mapChar), 'can':['K','A','N'].map(mapChar),
+    'talk':['T','A','L','K'].map(mapChar), 'emma':['E','M','A'].map(mapChar),
+    'mouth':['M','O','U','TH'].map(x=>x==='TH'?'S':mapChar(x[0])),
+    'move':['M','U','V'].map(mapChar), 'in':['I','N'].map(mapChar),
+    'sync':['S','I','NG','K'].map(x=>x==='NG'?'X':mapChar(x[0])),
+    'and':['A','N','D'].map(mapChar), 'me':['M','E'].map(mapChar),
+    'my':['M','I'].map(mapChar), 'helped':['H','E','L','P','T'].map(mapChar)
+  };
+  if (dict[w]) return dict[w];
+
+  // Generic: collapse runs → [consonant?] + vowel peaks
+  const out=[];
+  for(let i=0;i<w.length;i++){
+    const v = mapChar(w[i]);
+    // avoid long runs of X/S/etc.
+    if(out.length===0 || out[out.length-1]!==v) out.push(v);
+  }
+  // Ensure we opened if word has a vowel:
+  if (VOWEL.test(w) && !out.some(v=>['A','E','I','O','U'].includes(v))) out.push('A');
+  return out;
+}
+
+/* ===== schedule visemes inside a word window ===== */
+let playingTimers=[];
+function clearTimers(){ playingTimers.forEach(id=>clearTimeout(id)); playingTimers.length=0; }
+function scheduleWordVisemes(seq, wordMs, startNow){
+  // Spread seq across wordMs with min step
+  const steps = Math.max(1, seq.length);
+  const per = Math.max(STEP_MIN_MS, wordMs / steps);
+  for(let i=0;i<steps;i++){
+    const v = seq[i];
+    const at = startNow + i*per;
+    const id = setTimeout(()=>{
+      beginFade(v, performance.now());
+    }, Math.max(0, at - performance.now()));
+    playingTimers.push(id);
+  }
+}
+
+/* ===== speak with boundary-driven animation ===== */
+async function speakWithVisemes(text){
+  const synth = window.speechSynthesis;
+  if(!synth){ // fallback if speech blocked
+    const approx = Math.max(1500, Math.min(8000, text.length*55));
+    const seq = ['M','A','E','I','O','U','S','L','F','X'];
+    let t=performance.now(); for(let i=0;i<20;i++){ beginFade(seq[i%seq.length], t+=120); }
+    return new Promise(res=>setTimeout(res, approx));
+  }
+  try{synth.cancel();}catch(e){}
+
+  return new Promise(res=>{
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 1.02;
+
+    let lastBoundaryTime = performance.now();
+    let lastElapsed = 0;
+
+    u.onboundary = (e)=>{
+      if(e.name !== 'word') return;           // word boundaries
+      const now = performance.now();
+      // Duration of the *previous* word = current elapsed - last elapsed
+      const wordElapsed = e.elapsedTime*1000; // ms
+      const prevDur = Math.max(120, wordElapsed - lastElapsed);
+      lastElapsed = wordElapsed;
+
+      // Compute previous word text (best-effort)
+      // Browsers vary; safest is split walking:
+      // We’ll approximate using substring by elapsed index if present:
+      // If charLength isn’t given, we’ll just drive a neutral close for prev window.
+      // Here we simply drive the *next* word starting now (smoother in practice):
+      const nextWord = grabWordAt(text, e.charIndex || 0) || 'x';
+      const seq = wordToVisemes(nextWord);
+      scheduleWordVisemes(seq, Math.max(160, prevDur), performance.now());
+      lastBoundaryTime = now;
+    };
+
+    u.onend = ()=>{
+      // Close to X at the end
+      scheduleWordVisemes(['M','X'], 200, performance.now());
+      res();
+    };
+    u.onerror = ()=>{ res(); };
+
+    window.speechSynthesis.speak(u);
+  });
+}
+
+// naive word grab by position
+function grabWordAt(text, idx){
+  const s = text;
+  let l=idx, r=idx;
+  while(l>0 && /\w/.test(s[l-1])) l--;
+  while(r<s.length && /\w/.test(s[r])) r++;
+  return s.slice(l,r);
+}
+
+/* ===== init ===== */
+preload().then(()=>{
+  L1.firstElementChild.src=`${PNG_BASE}X.png`;
+  L2.firstElementChild.src=`${PNG_BASE}X.png`;
+});
+
+speakBtn.addEventListener('click', async ()=>{
+  const t = textEl.value.trim();
+  if(!t) return;
+  clearTimers();
+  playing = true;
+  await speakWithVisemes(t);
+  playing = false;
+  clearTimers();
+  beginFade("X", performance.now());
+});
+</script>
+</body>
+</html>
