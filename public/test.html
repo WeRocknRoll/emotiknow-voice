@@ -1,1 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Emma Mouth — Crossfade Test</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0b0f14; color:#eaf0f7; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { max-width:980px; margin:24px auto; padding:0 16px; }
+  h1 { margin:0 0 14px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+  textarea, input[type="text"] { width:100%; background:#0a0f14; color:#eaf0f7; border:1px solid #1b2632; border-radius:10px; padding:10px; }
+  button { background:#0f62fe; color:#fff; border:0; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer; }
+  input[type="range"] { width:260px; }
+  .stage { position:relative; width:640px; height:360px; border-radius:14px; overflow:hidden; background:#000; }
+  .stage img#bg { width:100%; height:100%; object-fit:cover; display:block; }
+  /* Mouth overlay (dual layers for crossfade) */
+  #mouth {
+    position:absolute; left:260px; top:98px;
+    width:300px; height:160px; pointer-events:none;
+    transform-origin:center center; transform:scale(.50) rotate(-1deg);
+  }
+  .layer { position:absolute; inset:0; opacity:0; transition:opacity 130ms linear; }
+  .layer img {
+    position:absolute; inset:0; width:100%; height:100%;
+    image-rendering:auto; mix-blend-mode:normal;
+    -webkit-mask-image: radial-gradient(80% 60% at 50% 55%, rgba(0,0,0,1) 65%, rgba(0,0,0,0) 100%);
+            mask-image: radial-gradient(80% 60% at 50% 55%, rgba(0,0,0,1) 65%, rgba(0,0,0,0) 100%);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Emma Mouth — Crossfade Test</h1>
 
+  <div class="stage">
+    <img id="bg" src="/emma.jpg" alt="Emma" />
+    <div id="mouth">
+      <div id="L1" class="layer" style="opacity:1"><img src="/mouth/X.png" alt=""></div>
+      <div id="L2" class="layer" style="opacity:0"><img src="/mouth/X.png" alt=""></div>
+    </div>
+  </div>
+
+  <div class="row"><div style="min-width:90px">Script</div><textarea id="text" rows="3">Hi, I’m Emma. I can talk and move my mouth in sync. How can I help?</textarea></div>
+  <div class="row">
+    <button id="speak">Speak</button>
+    <div>Viseme: <b id="viseme">X</b></div>
+  </div>
+
+  <div class="row"><div style="min-width:90px">Image URL</div><input id="imgUrl" type="text" value="/emma.jpg" /></div>
+  <div class="row"><div style="min-width:90px">Mouth X: <span id="lx">260</span>px</div><input id="mx" type="range" min="0" max="600" value="260" /></div>
+  <div class="row"><div style="min-width:90px">Mouth Y: <span id="ly">98</span>px</div><input id="my" type="range" min="0" max="300" value="98" /></div>
+  <div class="row"><div style="min-width:90px">Scale: <span id="ls">0.50</span></div><input id="ms" type="range" min="0.2" max="2" step="0.01" value="0.50" /></div>
+  <div class="row"><div style="min-width:90px">Rotate: <span id="lr">-1</span>°</div><input id="mr" type="range" min="-30" max="30" step="1" value="-1" /></div>
+
+  <p style="opacity:.7;font-size:13px">Needs <code>/public/emma.jpg</code> and <code>/public/mouth/{X,A,E,I,O,U,M,F,L,S}.png</code>.</p>
+</div>
+
+<script>
+const PNG_BASE="/mouth/", VISEMES=["X","A","E","I","O","U","M","F","L","S"], FALLBACK={A:"O",E:"I",F:"I",L:"A",S:"I"};
+const HOLD_MS=60, CROSSFADE_MS=130;
+const OFFSETS={X:{dx:0,dy:0,s:1},M:{dx:0,dy:0,s:1},E:{dx:0,dy:0,s:1},I:{dx:0,dy:0,s:1},A:{dx:0,dy:2,s:1.01},O:{dx:0,dy:2,s:1.01},U:{dx:0,dy:3,s:1.015},F:{dx:0,dy:0,s:1},L:{dx:0,dy:0,s:1},S:{dx:0,dy:0,s:1}};
+const textEl=document.getElementById('text'), speakBtn=document.getElementById('speak'), visemeEl=document.getElementById('viseme');
+const imgUrl=document.getElementById('imgUrl'), bg=document.getElementById('bg');
+const mouth=document.getElementById('mouth'), L1=document.getElementById('L1'), L2=document.getElementById('L2');
+const mx=document.getElementById('mx'), lx=document.getElementById('lx'); const my=document.getElementById('my'), ly=document.getElementById('ly');
+const ms=document.getElementById('ms'), ls=document.getElementById('ls'); const mr=document.getElementById('mr'), lr=document.getElementById('lr');
+
+let baseScale=parseFloat(ms.value), baseRotate=parseFloat(mr.value);
+let playing=false, raf=null, t0=0, topIsL1=true, currentV="X";
+const EXISTS={};
+
+function updateOverlay(){ mouth.style.left=mx.value+'px'; mouth.style.top=my.value+'px'; baseScale=+ms.value; baseRotate=+mr.value; applyTransform(currentV);
+  lx.textContent=mx.value; ly.textContent=my.value; ls.textContent=(+ms.value).toFixed(2); lr.textContent=mr.value; }
+[mx,my,ms,mr].forEach(el=>el.addEventListener('input',updateOverlay)); imgUrl.addEventListener('change',()=>bg.src=imgUrl.value); updateOverlay();
+
+function preload(){ return Promise.all(VISEMES.map(v=>new Promise(r=>{ const im=new Image(); im.onload=()=>{EXISTS[v]=true;r();}; im.onerror=()=>{EXISTS[v]=false;r();}; im.src=`${PNG_BASE}${v}.png`; }))); }
+function spriteFor(v){ if(EXISTS[v]) return v; const fb=FALLBACK[v]||"X"; return EXISTS[fb]?fb:"X"; }
+function setVisemeLabel(v){ visemeEl.textContent=v; }
+function applyTransform(v){ const o=OFFSETS[v]||OFFSETS.X, s=baseScale*o.s; mouth.style.transform=`translate(${o.dx}px,${o.dy}px) scale(${s}) rotate(${baseRotate}deg)`; }
+
+let fade={from:"X",to:"X",tHold:0,tDone:0};
+function beginFade(nextV,now){ const to=spriteFor(nextV); if(to===fade.to) return; fade.from=fade.to; fade.to=to; fade.tHold=now+HOLD_MS; fade.tDone=fade.tHold+CROSSFADE_MS;
+  const nextLayer=topIsL1?L2:L1; nextLayer.firstElementChild.src=`${PNG_BASE}${to}.png`; L1.style.opacity=topIsL1?1:0; L2.style.opacity=topIsL1?0:1; setVisemeLabel(nextV); }
+function stepFade(now){ if(now<fade.tHold) return; if(now>=fade.tDone){ topIsL1=!topIsL1; L1.style.opacity=topIsL1?1:0; L2.style.opacity=topIsL1?0:1; return; }
+  const p=(now-fade.tHold)/(fade.tDone-fade.tHold); if(topIsL1){ L1.style.opacity=1-p; L2.style.opacity=p; } else { L1.style.opacity=p; L2.style.opacity=1-p; } }
+
+function makeTimeline(text){ const clean=text.trim().replace(/\s+/g," "); const groups=Math.max(16,Math.min(90,Math.ceil(clean.length/2.6)));
+  const seq=["M","A","E","I","O","U","S","L","F","X"]; const step=HOLD_MS+CROSSFADE_MS-25; return Array.from({length:groups},(_,i)=>({t:i*step,v:seq[i%seq.length]})); }
+
+function animate(marks){ t0=performance.now(); let i=0, last="X"; const loop=(now)=>{ while(i<marks.length && now-t0>=marks[i].t){ currentV=marks[i].v; if(currentV!==last){ beginFade(currentV,now); last=currentV; } i++; }
+  stepFade(now); applyTransform(currentV); if(playing) raf=requestAnimationFrame(loop); }; if(raf) cancelAnimationFrame(raf); raf=requestAnimationFrame(loop); }
+
+function speak(text){ return new Promise(res=>{ const synth=window.speechSynthesis; if(!synth){ setTimeout(res,Math.max(1500,Math.min(8000,text.length*55))); return; }
+  try{synth.cancel();}catch(e){} const u=new SpeechSynthesisUtterance(text); u.rate=1.0; u.pitch=1.02; u.onend=res; u.onerror=res; synth.speak(u); }); }
+
+preload().then(()=>{ L1.firstElementChild.src=`${PNG_BASE}X.png`; L2.firstElementChild.src=`${PNG_BASE}X.png`; });
+speakBtn.addEventListener('click', async ()=>{ const text=textEl.value.trim(); if(!text) return; playing=true; const marks=makeTimeline(text); animate(marks); await speak(text); playing=false; beginFade("X",performance.now()); applyTransform("X"); });
+</script>
+</body>
+</html>
