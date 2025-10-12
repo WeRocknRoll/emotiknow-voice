@@ -1,1 +1,119 @@
+'use client';
 
+import { useEffect, useRef, useState } from 'react';
+
+type ServerMsg =
+  | { type: 'viseme'; atMs: number; id: string }        // mouth pose cue
+  | { type: 'audio'; chunk: string }                     // base64 PCM/opus
+  | { type: 'done' }
+  | { type: 'error'; message: string };
+
+const VISEME_TO_IMAGE: Record<string, string> = {
+  X: '/mouths/X.png', A: '/mouths/A.png', E: '/mouths/E.png',
+  I: '/mouths/I.png', O: '/mouths/O.png', U: '/mouths/U.png',
+  M: '/mouths/M.png', F: '/mouths/F.png', L: '/mouths/L.png',
+  S: '/mouths/S.png',
+};
+
+export default function Home() {
+  const [connected, setConnected] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const currentVisemeRef = useRef<string>('X');
+
+  // simple animator loop
+  useEffect(() => {
+    let raf: number;
+    const img = new Image();
+    const draw = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d')!;
+      // clear
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // draw Emma base image (put your Emma base at /public/emma_base.png)
+      // (Optional: pre-load this once for perf)
+      // @ts-ignore
+      // eslint-disable-next-line no-undef
+      const base = (window as any).emmaBase as HTMLImageElement;
+      if (base?.complete) ctx.drawImage(base, 0, 0, canvas.width, canvas.height);
+      // draw mouth sprite
+      img.src = VISEME_TO_IMAGE[currentVisemeRef.current] || VISEME_TO_IMAGE['X'];
+      if (img.complete) {
+        // tune x,y,w,h to your mouth box
+        const w = 140, h = 90, x = 230, y = 300;
+        ctx.drawImage(img, x, y, w, h);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const connect = async () => {
+    if (connected) return;
+    const ac = new AudioContext();
+    audioCtxRef.current = ac;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const source = ac.createMediaStreamSource(stream);
+    sourceRef.current = source;
+
+    const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws');
+    ws.binaryType = 'arraybuffer';
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnected(true);
+      // start mic reader
+      const processor = new MediaStreamAudioDestinationNode(ac);
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      recorder.ondataavailable = (e) => e.data.arrayBuffer().then(buf => ws.send(buf));
+      recorder.start(250); // send every 250ms
+      (ws as any)._recorder = recorder;
+      setSpeaking(true);
+    };
+
+    ws.onmessage = (evt) => {
+      const msg: ServerMsg = JSON.parse(evt.data);
+      if (msg.type === 'viseme') {
+        // schedule immediately (client-clock simple mode)
+        currentVisemeRef.current = msg.id;
+      } else if (msg.type === 'audio') {
+        // basic stream playback using AudioContext decode (for MVP)
+        const b = Uint8Array.from(atob(msg.chunk), c => c.charCodeAt(0)).buffer;
+        audioCtxRef.current!.decodeAudioData(b.slice(0)).then((buf) => {
+          const node = audioCtxRef.current!.createBufferSource();
+          node.buffer = buf;
+          node.connect(audioCtxRef.current!.destination);
+          node.start();
+        }).catch(()=>{});
+      } else if (msg.type === 'done') {
+        setSpeaking(false);
+      }
+    };
+
+    ws.onerror = () => setConnected(false);
+    ws.onclose = () => setConnected(false);
+  };
+
+  return (
+    <main className="min-h-screen p-6 flex flex-col items-center gap-4">
+      <h1 className="text-2xl font-semibold">EmotiKnow Emma — Live</h1>
+      <div className="flex gap-3">
+        <button className="px-4 py-2 rounded bg-black text-white" onClick={connect} disabled={connected}>
+          {connected ? 'Connected' : 'Connect & Start'}
+        </button>
+        <span className="text-sm opacity-70">{speaking ? 'Listening & replying…' : 'Idle'}</span>
+      </div>
+      <canvas ref={canvasRef} width={512} height={512} className="border rounded" />
+      <p className="text-xs opacity-60">Tip: put your base image at <code>/public/emma_base.png</code> and mouth PNGs in <code>/public/mouths</code>.</p>
+      <img id="emmaBase" src="/emma_base.png" alt="" style={{display:'none'}} onLoad={()=>{
+        // @ts-ignore
+        (window as any).emmaBase = document.getElementById('emmaBase');
+      }}/>
+    </main>
+  );
+}
