@@ -1,35 +1,25 @@
-# main.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Emma API")
+app = FastAPI(title="EKP Realtime API")
 
-# allow your Next.js app to call this API during local dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:3000","http://localhost:3001","http://localhost:3002"],
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-# --- simple HTTP route so /docs shows something ---
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status":"ok"}
 
-# --- very simple echo WebSocket you can test from the browser console ---
 @app.websocket("/ws")
-async def ws_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    await websocket.send_text("connected")
+async def websocket_endpoint(ws: WebSocket):
+    await ws.accept()
     try:
+        await ws.send_text("👋 Connected to EKP server. Type a message!")
         while True:
-            msg = await websocket.receive_text()
-            await websocket.send_text(f"echo: {msg}")
+            msg = await ws.receive_text()  # for now, text only
+            await ws.send_text(f"Emma (demo): you said → {msg}")
     except WebSocketDisconnect:
         pass
-        
